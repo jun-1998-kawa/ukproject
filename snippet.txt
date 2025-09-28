@@ -1,0 +1,5 @@
+      )}
+      <SelectField labelHidden placeholder="•”ˆÊ" value={v.target} onChange={(e)=> { onFocus?.(); onChange({ ...v, target: e.target.value }) }}>
+        <option value=""></option>
+        {targets.map(t=> (<option key={t.code} value={t.code}>{t.nameJa ?? t.code}</option>))}
+      </SelectField>

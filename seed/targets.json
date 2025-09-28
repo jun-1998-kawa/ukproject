@@ -1,0 +1,7 @@
+[
+  { "code": "MEN",   "nameJa": "面",   "nameEn": "Men",   "order": 1, "active": true },
+  { "code": "KOTE",  "nameJa": "小手", "nameEn": "Kote",  "order": 2, "active": true },
+  { "code": "DO",    "nameJa": "胴",   "nameEn": "Do",    "order": 3, "active": true },
+  { "code": "TSUKI", "nameJa": "突き", "nameEn": "Tsuki", "order": 4, "active": true }
+]
+

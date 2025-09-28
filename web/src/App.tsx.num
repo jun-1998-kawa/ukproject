@@ -1,0 +1,374 @@
+   1: import { useEffect, useMemo, useState } from 'react'
+   2: import '@aws-amplify/ui-react/styles.css'
+   3: import { Amplify } from 'aws-amplify'
+   4: import { Authenticator, View, Heading, Button, Table, TableHead, TableRow, TableCell, TableBody, Badge, Flex, SelectField, TextField, RadioGroupField, Radio, CheckboxField, Alert } from '@aws-amplify/ui-react'
+   5: import { useTranslation } from 'react-i18next'
+   6: import QuickInputPanel from './components/QuickInputPanel'
+   7: import SheetInput from './components/SheetInput'
+   8: import NewEntryMode from './components/NewEntryMode'
+   9: import PlayersAdmin from './components/PlayersAdmin'
+  10: 
+  11: import outputs from '../../amplify_outputs.json'
+  12: 
+  13: Amplify.configure(outputs)
+  14: 
+  15: type Match = { id: string; heldOn: string; tournament?: string; bouts?: { items: Bout[] } }
+  16: type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string; points?: { items: Point[] } }
+  17: type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
+  18: 
+  19: const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn tournament bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType points{ items{ tSec target methods scorerPlayerId judgement } } } } } nextToken } }`
+  20: const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } }`
+  21: const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name } nextToken } }`
+  22: const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
+  23: 
+  24: export default function App() {
+  25:   const { t } = useTranslation()
+  26:   const [loading, setLoading] = useState(false)
+  27:   const [matches, setMatches] = useState<Match[]>([])
+  28:   const [error, setError] = useState<string | null>(null)
+  29:   const [masters, setMasters] = useState<any>({ targets: [], methods: [], positions: [] })
+  30:   const [players, setPlayers] = useState<Record<string,string>>({})
+  31:   const [labelJa, setLabelJa] = useState<{ target: Record<string,string>, method: Record<string,string>, position: Record<string,string> }>({ target: {}, method: {}, position: {} })
+  32:   const [selectedMatchId, setSelectedMatchId] = useState('')
+  33:   const [selectedBoutId, setSelectedBoutId] = useState('')
+  34:   const [tab, setTab] = useState<'new'|'players'|'input'|'sheet'|'dashboard'>('new')
+  35:   const [form, setForm] = useState({ tSec: 60, target: '', methods: [] as string[], scorer: 'our' as 'our' | 'opponent', judgement: 'REGULAR', isDecisive: false, sequenceLen: 1, sequenceTargets: [] as string[], isMutual: false })
+  36:   const [techModal, setTechModal] = useState<{ open: boolean, side: 'left'|'right'|null, target: string, methods: string[] }>({ open: false, side: null, target: '', methods: [] })
+  37:   const [fouls, setFouls] = useState<Record<string, number>>({})
+  38:   const [showLegacy, setShowLegacy] = useState(false)
+  39: 
+  40:   const apiUrl = (outputs as any).data.url as string
+  41: 
+  42:   async function getToken() {
+  43:     try { return (await (await import('aws-amplify/auth')).fetchAuthSession()).tokens?.idToken?.toString() ?? null } catch { return null }
+  44:   }
+  45: 
+  46:   async function fetchMatches() {
+  47:     setLoading(true); setError(null)
+  48:     try {
+  49:       const token = await getToken(); if (!token) return
+  50:       let nextToken: string | null = null
+  51:       const acc: any[] = []
+  52:       do {
+  53:         const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: listMatchesPage, variables: { limit: 200, nextToken } }) })
+  54:         const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
+  55:         acc.push(...json.data.listMatches.items)
+  56:         nextToken = json.data.listMatches.nextToken
+  57:       } while(nextToken)
+  58:       setMatches(acc)
+  59:     } catch (e: any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
+  60:   }
+  61: 
+  62:   async function fetchMasters() {
+  63:     setError(null)
+  64:     try {
+  65:       const token = await getToken(); if (!token) return
+  66:       const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: listMastersQuery }) })
+  67:       const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
+  68:       const tItems = json.data.listTargetMasters.items
+  69:       const mItems = json.data.listMethodMasters.items
+  70:       const pItems = json.data.listPositionMasters.items
+  71:       setMasters({ targets: tItems, methods: mItems, positions: pItems })
+  72:       const tMap: Record<string,string> = {}; for(const t of tItems) tMap[t.code]=t.nameJa
+  73:       const mMap: Record<string,string> = {}; for(const m of mItems) mMap[m.code]=m.nameJa
+  74:       const pMap: Record<string,string> = {}; for(const p of pItems) pMap[p.code]=p.nameJa
+  75:       setLabelJa({ target: tMap, method: mMap, position: pMap })
+  76:       // players
+  77:       let nextToken: string | null = null
+  78:       const map: Record<string,string> = {}
+  79:       do {
+  80:         const r: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: listPlayersPage, variables: { limit: 200, nextToken } }) })
+  81:         const j: any = await r.json(); if (j.errors) throw new Error(JSON.stringify(j.errors))
+  82:         for (const p of j.data.listPlayers.items) map[p.id] = p.name
+  83:         nextToken = j.data.listPlayers.nextToken
+  84:       } while(nextToken)
+  85:       setPlayers(map)
+  86:     } catch (e: any) { setError(String(e?.message ?? e)) }
+  87:   }
+  88: 
+  89:   useEffect(() => { fetchMatches(); fetchMasters() }, [])
+  90: 
+  91:   const selectedMatch = useMemo(() => matches.find(m => m.id === selectedMatchId), [matches, selectedMatchId])
+  92:   const selectedBout = useMemo(() => (selectedMatch?.bouts?.items ?? []).find(b => b.id === selectedBoutId), [selectedMatch, selectedBoutId])
+  93: 
+  94:   function techniqueKey(target: string, methods: string[]) { return `${target}:${[...methods].sort().join('+')}` }
+  95: 
+  96:   function methodFirstLabel(targetCode?: string | null, methods?: string[] | null) {
+  97:     if (!targetCode) return '-'
+  98:     const tlabel = labelJa.target[targetCode] ?? targetCode
+  99:     const mm = methods ?? []
+ 100:     if (mm.length === 0) return tlabel
+ 101:     return mm.map(m => `${labelJa.method[m] ?? m}${tlabel}`).join(' / ')
+ 102:   }
+ 103: 
+ 104:   async function createPointDirect(args:{ scorer: 'our'|'opponent', target: string, methods: string[] }){
+ 105:     if (!selectedBout) { setError(t('placeholder.select')); return }
+ 106:     setLoading(true); setError(null)
+ 107:     try{
+ 108:       const token = await getToken(); if (!token) throw new Error('No ID token')
+ 109:       const scorerPlayerId = args.scorer === 'our' ? selectedBout.ourPlayerId : selectedBout.opponentPlayerId
+ 110:       const opponentPlayerId = args.scorer === 'our' ? selectedBout.opponentPlayerId : selectedBout.ourPlayerId
+ 111:       const input: any = { boutId: selectedBout.id, tSec: Number(form.tSec)||0, scorerPlayerId, opponentPlayerId, target: args.target, methods: args.methods, position: selectedBout.ourPosition ?? null, scorerStance: args.scorer === 'our' ? (selectedBout.ourStance ?? null) : (selectedBout.opponentStance ?? null), opponentStance: args.scorer === 'our' ? (selectedBout.opponentStance ?? null) : (selectedBout.ourStance ?? null), judgement: 'REGULAR', isDecisive: false, techniqueKey: techniqueKey(args.target, args.methods), recordedAt: new Date().toISOString(), version: 1 }
+ 112:       const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPointMutation, variables: { input } }) })
+ 113:       const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
+ 114:       await fetchMatches()
+ 115:     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 116:   }
+ 117: 
+ 118:   async function createPointSmart(){
+ 119:     if (!selectedBout) { setError(t('placeholder.select')); return }
+ 120:     const tSec = Number(form.tSec); if (!Number.isFinite(tSec) || tSec < 0) { setError(t('field.timeSec')); return }
+ 121:     const isFoul = form.judgement === 'HANSOKU'
+ 122:     if (!isFoul) {
+ 123:       if (!form.target) { setError(t('field.target')); return }
+ 124:       if (form.methods.length === 0) { setError(t('field.method')); return }
+ 125:     }
+ 126:     setLoading(true); setError(null)
+ 127:     try{
+ 128:       const token = await getToken(); if (!token) throw new Error('No ID token')
+ 129:       const scorerPlayerId = form.scorer === 'our' ? selectedBout.ourPlayerId : selectedBout.opponentPlayerId
+ 130:       const opponentPlayerId = form.scorer === 'our' ? selectedBout.opponentPlayerId : selectedBout.ourPlayerId
+ 131:       const base: any = { boutId: selectedBout.id, tSec, scorerPlayerId, opponentPlayerId, position: selectedBout.ourPosition ?? null, scorerStance: form.scorer === 'our' ? (selectedBout.ourStance ?? null) : (selectedBout.opponentStance ?? null), opponentStance: form.scorer === 'our' ? (selectedBout.opponentStance ?? null) : (selectedBout.ourStance ?? null), judgement: form.judgement, isDecisive: form.isDecisive, recordedAt: new Date().toISOString(), version: 1 }
+ 132:       const input = isFoul ? { ...base, techniqueKey: 'HANSOKU' } : { ...base, target: form.target, methods: form.methods, techniqueKey: techniqueKey(form.target, form.methods) }
+ 133:       const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPointMutation, variables: { input } }) })
+ 134:       const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
+ 135:       await fetchMatches(); setForm(f => ({ ...f, tSec: 60, methods: [], isDecisive: false, sequenceLen: 1, sequenceTargets: [], isMutual: false }))
+ 136:     } catch (e:any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 137:   }
+ 138: 
+ 139:   async function addFoul(toSide: 'left'|'right'){
+ 140:     if(!selectedBout) return
+ 141:     const penalizedPlayerId = toSide === 'left' ? selectedBout.ourPlayerId : selectedBout.opponentPlayerId
+ 142:     const opponentPlayerId = toSide === 'left' ? selectedBout.opponentPlayerId : selectedBout.ourPlayerId
+ 143:     const next = (fouls[penalizedPlayerId] ?? 0) + 1
+ 144:     setFouls(prev => ({ ...prev, [penalizedPlayerId]: next }))
+ 145:     if (next >= 2) {
+ 146:       setLoading(true); setError(null)
+ 147:       try {
+ 148:         const token = await getToken(); if (!token) throw new Error('No ID token')
+ 149:         const input: any = { boutId: selectedBout.id, tSec: Number(form.tSec) || 0, scorerPlayerId: opponentPlayerId, opponentPlayerId: penalizedPlayerId, position: selectedBout.ourPosition ?? null, scorerStance: null, opponentStance: null, judgement: 'HANSOKU', isDecisive: false, techniqueKey: 'HANSOKU', recordedAt: new Date().toISOString(), version: 1 }
+ 150:         const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPointMutation, variables: { input } }) })
+ 151:         const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
+ 152:         await fetchMatches(); setFouls(prev => ({ ...prev, [penalizedPlayerId]: 0 }))
+ 153:       } catch (e: any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 154:     }
+ 155:   }
+ 156: 
+ 157:   return (
+ 158:     <Authenticator>
+ 159:       {({ signOut, user }) => (
+ 160:         <View padding="1rem" maxWidth="1200px" margin="0 auto">
+ 161:           <View display="flex" justifyContent="space-between" alignItems="center" marginBottom="1rem">
+ 162:             <Heading level={3}>{t('app.title')}</Heading>
+ 163:             <View>
+ 164:               <Badge variation="info" marginRight="1rem">{user?.signInDetails?.loginId}</Badge>
+ 165:               <Button onClick={signOut}>{t('action.signOut')}</Button>
+ 166:             </View>
+ 167:           </View>
+ 168: 
+ 169:           <View marginBottom="0.75rem" display="flex" gap="0.5rem">
+ 170:             <Button variation={tab==='new'?'primary':'link'} onClick={()=> setTab('new')}>{t('tab.new')}</Button>
+ 171:             <Button variation={tab==='players'?'primary':'link'} onClick={()=> setTab('players')}>{t('nav.playersRegister')}</Button>
+ 172:             <Button variation={tab==='input'?'primary':'link'} onClick={()=> setTab('input')}>{t('tab.input')}</Button>
+ 173:             <Button variation={tab==='sheet'?'primary':'link'} onClick={()=> setTab('sheet')}>Sheet</Button>
+ 174:             <Button variation={tab==='dashboard'?'primary':'link'} onClick={()=> setTab('dashboard')}>{t('tab.dashboard')}</Button>
+ 175:           </View>
+ 176: 
+ 177:           {tab==='new' && (
+ 178:             <NewEntryMode
+ 179:               matchId={selectedMatchId}
+ 180:               setMatchId={setSelectedMatchId}
+ 181:               matches={matches as any}
+ 182:               bouts={(selectedMatch?.bouts?.items ?? []) as any}
+ 183:               players={players}
+ 184:               masters={{ targets: masters.targets as any, methods: masters.methods as any }}
+ 185:               apiUrl={apiUrl}
+ 186:               getToken={getToken}
+ 187:               onSaved={async ()=> { await fetchMatches() }}
+ 188:             />
+ 189:           )}
+ 190: 
+ 191:           {tab==='players' && (
+ 192:             <PlayersAdmin apiUrl={apiUrl} getToken={getToken} />
+ 193:           )}
+ 194: 
+ 195:           {tab==='sheet' && (
+ 196:             <>
+ 197:               <View marginBottom="1rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap'}}>
+ 198:                 <Button isLoading={loading} onClick={fetchMatches}>{t('action.reload')}</Button>
+ 199:                 <SelectField label={t('field.match')} value={selectedMatchId} onChange={e=> setSelectedMatchId(e.target.value)} size="small">
+ 200:                   <option value="">{t('placeholder.select')}</option>
+ 201:                   {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
+ 202:                 </SelectField>
+ 203:                 <SelectField label={t('field.bout')} value={selectedBoutId} onChange={e=> setSelectedBoutId(e.target.value)} size="small" isDisabled={!selectedMatch}>
+ 204:                   <option value="">{t('placeholder.select')}</option>
+ 205:                   {(selectedMatch?.bouts?.items ?? []).map(b => (
+ 206:                     <option key={b.id} value={b.id}>{labelJa.position[b.ourPosition??''] ? `[${labelJa.position[b.ourPosition??'']}] `: ''}{players[b.ourPlayerId] ?? b.ourPlayerId} vs {players[b.opponentPlayerId] ?? b.opponentPlayerId}</option>
+ 207:                   ))}
+ 208:                 </SelectField>
+ 209:               </View>
+ 210: 
+ 211:               {selectedBout && (
+ 212:                 <View border="1px solid #ddd" borderRadius="8px" padding="12px" marginBottom="16px">
+ 213:                   <SheetInput
+ 214:                     bout={selectedBout as any}
+ 215:                     existingPoints={(selectedBout.points?.items ?? []) as any}
+ 216:                     masters={{ targets: masters.targets as any, methods: masters.methods as any }}
+ 217:                     labelJa={{ target: labelJa.target, method: labelJa.method }}
+ 218:                     apiUrl={apiUrl}
+ 219:                     getToken={getToken}
+ 220:                     onSaved={async ()=> { await fetchMatches() }}
+ 221:                   />
+ 222:                 </View>
+ 223:               )}
+ 224:             </>
+ 225:           )}
+ 226: 
+ 227:           {tab==='input' ? (
+ 228:             <>
+ 229:               <View marginBottom="1rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap'}}>
+ 230:                 <Button isLoading={loading} onClick={fetchMatches}>{t('action.reload')}</Button>
+ 231:                 <SelectField label={t('field.match')} value={selectedMatchId} onChange={e=> setSelectedMatchId(e.target.value)} size="small">
+ 232:                   <option value="">{t('placeholder.select')}</option>
+ 233:                   {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
+ 234:                 </SelectField>
+ 235:                 <SelectField label={t('field.bout')} value={selectedBoutId} onChange={e=> setSelectedBoutId(e.target.value)} size="small" isDisabled={!selectedMatch}>
+ 236:                   <option value="">{t('placeholder.select')}</option>
+ 237:                   {(selectedMatch?.bouts?.items ?? []).map(b => (
+ 238:                     <option key={b.id} value={b.id}>{labelJa.position[b.ourPosition??''] ? `[${labelJa.position[b.ourPosition??'']}] `: ''}{players[b.ourPlayerId] ?? b.ourPlayerId} vs {players[b.opponentPlayerId] ?? b.opponentPlayerId}</option>
+ 239:                   ))}
+ 240:                 </SelectField>
+ 241:               </View>
+ 242: 
+ 243:               {selectedBout && (
+ 244:                 <View border="1px solid #ddd" borderRadius="8px" padding="12px" marginBottom="16px">
+ 245:                   <Heading level={5}>{t('section.dualPane')}</Heading>
+ 246:                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:8 }}>
+ 247:                     <QuickInputPanel
+ 248:                       side="left"
+ 249:                       playerName={(players[selectedBout.ourPlayerId] ?? selectedBout.ourPlayerId) + " (" + t('left') + ")"}
+ 250:                       targets={masters.targets.map((x:any)=> ({ code:x.code, label:x.nameJa }))}
+ 251:                       methods={masters.methods.map((x:any)=> ({ code:x.code, label:x.nameJa }))}
+ 252:                       foulCount={fouls[selectedBout.ourPlayerId] ?? 0}
+ 253:                       onFoul={addFoul}
+ 254:                       onPoint={({ side, target, methods })=> createPointDirect({ scorer: side==='left'?'our':'opponent', target, methods })}
+ 255:                     />
+ 256:                     <QuickInputPanel
+ 257:                       side="right"
+ 258:                       playerName={(players[selectedBout.opponentPlayerId] ?? selectedBout.opponentPlayerId) + " (" + t('right') + ")"}
+ 259:                       targets={masters.targets.map((x:any)=> ({ code:x.code, label:x.nameJa }))}
+ 260:                       methods={masters.methods.map((x:any)=> ({ code:x.code, label:x.nameJa }))}
+ 261:                       foulCount={fouls[selectedBout.opponentPlayerId] ?? 0}
+ 262:                       onFoul={addFoul}
+ 263:                       onPoint={({ side, target, methods })=> createPointDirect({ scorer: side==='left'?'our':'opponent', target, methods })}
+ 264:                     />
+ 265:                   </div>
+ 266:                 </View>
+ 267:               )}
+ 268: 
+ 269:               <View border="1px solid #ddd" borderRadius="8px" padding="12px" marginBottom="16px">
+ 270:                 <Heading level={5}>{t('section.legacyInput')}</Heading>
+ 271:                 <Button variation="link" onClick={()=> setShowLegacy(s=> !s)}>{showLegacy ? t('toggle.legacy.hide') : t('toggle.legacy.show')}</Button>
+ 272:                 {showLegacy && (
+ 273:                   <Flex gap="0.75rem" wrap="wrap" marginTop="0.5rem">
+ 274:                     <TextField label={t('field.timeSec')} type="number" width="8rem" value={String(form.tSec)} onChange={e=> setForm(f=> ({...f, tSec: Number(e.target.value)}))} />
+ 275:                     <SelectField label={t('field.target')} value={form.target} onChange={e=> setForm(f=> ({...f, target: e.target.value}))} width="10rem">
+ 276:                       <option value="">{t('placeholder.select')}</option>
+ 277:                       {masters.targets.map((tgt:any)=> (<option key={tgt.code} value={tgt.code}>{tgt.nameJa}</option>))}
+ 278:                     </SelectField>
+ 279:                     <SelectField label={t('field.method')} value="" onChange={e=> { const v = e.target.value; setForm(f=> f.methods.includes(v) || !v ? f : {...f, methods: [...f.methods, v]}) }} width="14rem">
+ 280:                       <option value="">{t('action.add')}</option>
+ 281:                       {masters.methods.map((m:any)=> (<option key={m.code} value={m.code}>{m.nameJa}</option>))}
+ 282:                     </SelectField>
+ 283:                     <View>
+ 284:                       <div style={{ fontSize: '0.85em', marginBottom: 4 }}>{t('field.method')}</div>
+ 285:                       <div>
+ 286:                         {form.methods.map((m)=> (
+ 287:                           <Badge key={m} marginRight="4px">
+ 288:                             {labelJa.method[m] ?? m}
+ 289:                             <Button size="small" variation="link" onClick={()=> setForm(f=> ({...f, methods: f.methods.filter(x=> x!==m)}))}>x</Button>
+ 290:                           </Badge>
+ 291:                         ))}
+ 292:                         {form.methods.length>0 && (
+ 293:                           <Button size="small" onClick={()=> setForm(f=> ({...f, methods: []}))}>Clear</Button>
+ 294:                         )}
+ 295:                       </div>
+ 296:                     </View>
+ 297:                     <RadioGroupField name="scorer" legend={t('field.scorer')} direction="row" value={form.scorer} onChange={(e:any)=> setForm(f=> ({...f, scorer: ((e?.target?.value ?? e) as any)}))}>
+ 298:                       <Radio value="our">{t('team.our')}</Radio>
+ 299:                       <Radio value="opponent">{t('team.opponent')}</Radio>
+ 300:                     </RadioGroupField>
+ 301:                     <SelectField label={t('field.judgement')} value={form.judgement} onChange={e=> setForm(f=> ({...f, judgement: e.target.value}))} width="10rem">
+ 302:                       <option value="REGULAR">{t('judgement.REGULAR')}</option>
+ 303:                       <option value="ENCHO">{t('judgement.ENCHO')}</option>
+ 304:                       <option value="HANSOKU">{t('judgement.HANSOKU')}</option>
+ 305:                     </SelectField>
+ 306:                     <CheckboxField label={t('field.decidingStrike')} checked={form.isDecisive} onChange={e=> setForm(f=> ({...f, isDecisive: e.target.checked}))} />
+ 307:                     <Button onClick={createPointSmart} isDisabled={!selectedBout} isLoading={loading}>{t('action.add')}</Button>
+ 308:                   </Flex>
+ 309:                 )}
+ 310:                 {error && <Alert variation="error" marginTop="0.5rem">{error}</Alert>}
+ 311:               </View>
+ 312: 
+ 313:               <Table variation="striped" highlightOnHover>
+ 314:                 <TableHead>
+ 315:                   <TableRow>
+ 316:                     <TableCell as="th">Date</TableCell>
+ 317:                     <TableCell as="th">Tournament</TableCell>
+ 318:                     <TableCell as="th">Bout</TableCell>
+ 319:                   </TableRow>
+ 320:                 </TableHead>
+ 321:                 <TableBody>
+ 322:                   {matches.map((m) => (
+ 323:                     <TableRow key={m.id}>
+ 324:                       <TableCell>{m.heldOn}</TableCell>
+ 325:                       <TableCell>{m.tournament ?? '-'}</TableCell>
+ 326:                       <TableCell>
+ 327:                         {(m.bouts?.items ?? []).map((b) => (
+ 328:                           <View key={b.id} paddingBlock="0.25rem">
+ 329:                             <div>{players[b.ourPlayerId] ?? b.ourPlayerId} vs {players[b.opponentPlayerId] ?? b.opponentPlayerId} [{b.winType ?? '-'}]</div>
+ 330:                             <div style={{ fontSize: '0.9em', color: '#444' }}>
+ 331:                               {(b.points?.items ?? []).map((p, i) => {
+ 332:                                 const label = p.judgement === 'HANSOKU' ? t('label.foulPoint') : methodFirstLabel(p.target, p.methods)
+ 333:                                 const side = p.scorerPlayerId === b.ourPlayerId ? '<-' : (p.scorerPlayerId === b.opponentPlayerId ? '->' : '')
+ 334:                                 return (<span key={i} style={{ marginRight: 8 }}>{side} {p.tSec}s {label}</span>)
+ 335:                               })}
+ 336:                             </div>
+ 337:                           </View>
+ 338:                         ))}
+ 339:                       </TableCell>
+ 340:                     </TableRow>
+ 341:                   ))}
+ 342:                 </TableBody>
+ 343:               </Table>
+ 344: 
+ 345:               {techModal.open && (
+ 346:                 <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }} onClick={closeTechModal}>
+ 347:                   <div style={{ background:'#fff', minWidth:320, maxWidth:560, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+ 348:                     <Heading level={5}>Select Detailed Technique</Heading>
+ 349:                     <div style={{ color:'#666', margin:'6px 0 12px' }}>Target: {labelJa.target[techModal.target] ?? techModal.target}</div>
+ 350:                     <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+ 351:                       {masters.methods.map((m:any)=>{
+ 352:                         const checked = techModal.methods.includes(m.code)
+ 353:                         const display = `${m.nameJa}${labelJa.target[techModal.target] ?? techModal.target}`
+ 354:                         return (
+ 355:                           <button key={m.code} onClick={()=> setTechModal(s=> ({...s, methods: checked ? s.methods.filter((x:string)=> x!==m.code) : [...s.methods, m.code]}))} style={{ padding:'6px 10px', borderRadius:16, border:'1px solid #ddd', background: checked ? '#eef6ff' : '#fff', cursor:'pointer' }}>{display}</button>
+ 356:                         )
+ 357:                       })}
+ 358:                     </div>
+ 359:                     <div style={{ display:'flex', gap:8, marginTop:14, justifyContent:'flex-end' }}>
+ 360:                       <Button onClick={closeTechModal} variation="link">Cancel</Button>
+ 361:                       <Button onClick={confirmTechModal} variation="primary">Save</Button>
+ 362:                     </div>
+ 363:                   </div>
+ 364:                 </div>
+ 365:               )}
+ 366:             </>
+ 367:           ) : (
+ 368:             <View>Coming soon</View>
+ 369:           )}
+ 370:         </View>
+ 371:       )}
+ 372:     </Authenticator>
+ 373:   )
+ 374: }

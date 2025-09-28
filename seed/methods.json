@@ -1,0 +1,11 @@
+[
+  { "code": "SURIAGE", "nameJa": "すり上げ", "nameEn": "Suriage", "order": 1, "active": true },
+  { "code": "KAESHI",  "nameJa": "返し",     "nameEn": "Kaeshi",  "order": 2, "active": true },
+  { "code": "NUKI",    "nameJa": "抜き",     "nameEn": "Nuki",    "order": 3, "active": true },
+  { "code": "DEBANA",  "nameJa": "出ばな",   "nameEn": "Debana",  "order": 4, "active": true },
+  { "code": "HIKI",    "nameJa": "引き",     "nameEn": "Hiki",    "order": 5, "active": true },
+  { "code": "HARAI",   "nameJa": "払い",     "nameEn": "Harai",   "order": 6, "active": true },
+  { "code": "KATSUGI", "nameJa": "担ぎ",     "nameEn": "Katsugi", "order": 7, "active": true },
+  { "code": "RENZOKU", "nameJa": "連続",     "nameEn": "Renzoku", "order": 8, "active": true }
+]
+

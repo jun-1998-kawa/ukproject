@@ -1,0 +1,1 @@
+                          <Button key={t.code} onClick={()=> openTechModal('right', t.code)}>{t.nameJa}</Button>

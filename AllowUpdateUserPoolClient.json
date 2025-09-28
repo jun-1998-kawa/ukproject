@@ -1,0 +1,14 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "cognito-idp:UpdateUserPoolClient",
+                "cognito-idp:DescribeUserPoolClient",
+                "cognito-idp:ListUserPoolClients"
+            ],
+            "Resource": "arn:aws:cognito-idp:ap-northeast-1:471112900075:userpool/ap-northeast-1_mdGGYBAJw"
+        }
+    ]
+}

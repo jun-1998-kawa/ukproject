@@ -1,0 +1,286 @@
+   1: import { useEffect, useMemo, useState } from 'react'
+   2: import { useTranslation } from 'react-i18next'
+   3: import { View, Heading, Button, TextField, Table, TableHead, TableRow, TableCell, TableBody, Alert, SelectField, Badge } from '@aws-amplify/ui-react'
+   4: import { useTranslation } from 'react-i18next'
+   5: 
+   6: type Player = { id: string; name: string; nameKana?: string|null; universityId?: string|null; enrollYear?: number|null; grade?: number|null; gradeOverride?: number|null; programYears?: number|null; studentNo?: string|null; dan?: string|null; preferredStance?: string|null; isActive?: boolean|null; notes?: string|null }
+   7: type University = { id: string; name: string; shortName?: string|null }
+   8: 
+   9: const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } nextToken } }`
+  10: const listUniversities = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+  11: const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
+  12: const updatePlayerMutation = `mutation UpdatePlayer($input: UpdatePlayerInput!) { updatePlayer(input:$input){ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
+  13: const deletePlayerMutation = `mutation DeletePlayer($input: DeletePlayerInput!) { deletePlayer(input:$input){ id } }`
+  14: 
+  15: export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promise<string|null> }){
+  16:   const { t } = useTranslation()
+  17:   const { apiUrl, getToken } = props
+  18:   const [loading, setLoading] = useState(false)
+  19:   const [error, setError] = useState<string|null>(null)
+  20:   const [players, setPlayers] = useState<Player[]>([])
+  21:   const [universities, setUniversities] = useState<University[]>([])
+  22:   const [filter, setFilter] = useState('')
+  23:   const [newName, setNewName] = useState('')
+  24:   const [newUniversityId, setNewUniversityId] = useState('')
+  25:   const [newEnrollYear, setNewEnrollYear] = useState<string>('')
+  26:   const [newDan, setNewDan] = useState('')
+  27:   const [newStance, setNewStance] = useState('')
+  28:   const [newKana, setNewKana] = useState('')
+  29:   const [newStudentNo, setNewStudentNo] = useState('')
+  30:   const [newNotes, setNewNotes] = useState('')
+  31:   const [newIsActive, setNewIsActive] = useState(true)
+  32: 
+  33:   // Quick Add University modal state
+  34:   const [uniModal, setUniModal] = useState<{open:boolean, name:string, shortName:string, code:string, error:string|null}>({ open:false, name:'', shortName:'', code:'', error:null })
+  35: 
+  36:   // UniqueIndex helpers (backend BˆÄ)
+  37:   const createUniqueIndex = async (pk:string, sk:string, token:string)=>{
+  38:     const q = `mutation CreateUniqueIndex($input: CreateUniqueIndexInput!){ createUniqueIndex(input:$input){ pk sk } }`
+  39:     const r: Response = await fetch(apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query:q, variables:{ input:{ pk, sk } } }) })
+  40:     const j:any = await r.json(); if(j.errors) throw new Error('UniqueIndex: '+JSON.stringify(j.errors))
+  41:   }
+  42:   const deleteUniqueIndex = async (pk:string, sk:string, token:string)=>{
+  43:     const q = `mutation DeleteUniqueIndex($input: DeleteUniqueIndexInput!){ deleteUniqueIndex(input:$input){ pk sk } }`
+  44:     const r: Response = await fetch(apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query:q, variables:{ input:{ pk, sk } } }) })
+  45:     const j:any = await r.json(); if(j.errors) throw new Error('UniqueIndex: '+JSON.stringify(j.errors))
+  46:   }
+  47:   const normalize = (s:string)=> s.trim().toLowerCase()
+  48: 
+  49:   async function quickAddUniversity(){
+  50:     setUniModal(m=> ({...m, error:null}))
+  51:     try{
+  52:       const token = await getToken(); if(!token) { setUniModal(m=> ({...m, error:t('errors.notSignedIn')})); return }
+  53:       const name = uniModal.name.trim(); if(!name){ setUniModal(m=> ({...m, error:t('admin.universities.errors.requiredName')})); return }
+  54:       const shortName = uniModal.shortName.trim()||undefined
+  55:       const code = uniModal.code.trim()||undefined
+  56:       // reserve unique keys
+  57:       await createUniqueIndex('UNIVERSITY', `name:${normalize(name)}`, token)
+  58:       if(code) await createUniqueIndex('UNIVERSITY', `code:${normalize(code)}`, token)
+  59:       // create university
+  60:       const q = `mutation CreateUniversity($input: CreateUniversityInput!){ createUniversity(input:$input){ id name } }`
+  61:       const r: Response = await fetch(apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query:q, variables:{ input:{ name, shortName, code } } }) })
+  62:       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+  63:       const newId = j.data.createUniversity.id as string
+  64:       // refresh list and select
+  65:       await load()
+  66:       setNewUniversityId(newId)
+  67:       setUniModal({ open:false, name:'', shortName:'', code:'', error:null })
+  68:     }catch(e:any){
+  69:       const msg = String(e?.message ?? e)
+  70:       if(msg.includes('UniqueIndex') || msg.includes('ConditionalCheckFailed') || msg.includes('already exists')){
+  71:         setUniModal(m=> ({...m, error: t('admin.universities.errors.duplicateName')}))
+  72:       }else{
+  73:         setUniModal(m=> ({...m, error: msg}))
+  74:       }
+  75:     }
+  76:   }
+  77: 
+  78:   async function load(){
+  79:     setLoading(true); setError(null)
+  80:     try{
+  81:       const token = await getToken(); if(!token) return
+  82:       let nextToken: string | null = null
+  83:       const acc: Player[] = []
+  84:       do{
+  85:         const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: listPlayersPage, variables: { limit: 200, nextToken } }) })
+  86:         const j: any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+  87:         acc.push(...j.data.listPlayers.items)
+  88:         nextToken = j.data.listPlayers.nextToken
+  89:       } while(nextToken)
+  90:       setPlayers(acc)
+  91:       let nextU: string | null = null
+  92:       const uni: University[] = []
+  93:       do{
+  94:         const ur: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: listUniversities, variables: { limit: 200, nextToken: nextU } }) })
+  95:         const uj:any = await ur.json(); if(uj.errors) throw new Error(JSON.stringify(uj.errors))
+  96:         uni.push(...uj.data.listUniversities.items)
+  97:         nextU = uj.data.listUniversities.nextToken
+  98:       } while(nextU)
+  99:       setUniversities(uni)
+ 100:     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 101:   }
+ 102: 
+ 103:   useEffect(()=>{ load() }, [])
+ 104: 
+ 105:   const visible = useMemo(()=> players.filter(p => (p.name.toLowerCase().includes(filter.toLowerCase()) || (p.nameKana||'').toLowerCase().includes(filter.toLowerCase()))), [players, filter])
+ 106: 
+ 107:   function currentAcademicYear(today = new Date()){
+ 108:     const y = today.getFullYear();
+ 109:     const isAfterApril = (today.getMonth()+1) >= 4;
+ 110:     return isAfterApril ? y : y - 1;
+ 111:   }
+ 112:   function calcGrade(enrollYear?: number|null){
+ 113:     if(!enrollYear) return null;
+ 114:     const g = currentAcademicYear() - enrollYear + 1;
+ 115:     return g > 0 && g < 10 ? g : null;
+ 116:   }
+ 117: 
+ 118:   async function add(){
+ 119:     if(!newName.trim()) return
+ 120:     if(!newUniversityId){ setError(t('errors.universityRequired')); return }
+ 121:     setLoading(true); setError(null)
+ 122:     try{
+ 123:       const token = await getToken(); if(!token) return
+ 124:       const enrollYear = Number(newEnrollYear) || undefined
+ 125:       const grade = calcGrade(enrollYear) ?? undefined
+ 126:       const input:any = { name: newName.trim() }
+ 127:       if(newUniversityId) input.universityId = newUniversityId
+ 128:       if(enrollYear) input.enrollYear = enrollYear
+ 129:       if(grade) input.grade = grade
+ 130:       if(newDan) input.dan = newDan
+ 131:       if(newStance) input.preferredStance = newStance
+ 132:       if(newKana) input.nameKana = newKana
+ 133:       if(newStudentNo) input.studentNo = newStudentNo
+ 134:       if(newNotes) input.notes = newNotes
+ 135:       input.isActive = newIsActive
+ 136:       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPlayerMutation, variables: { input } }) })
+ 137:       const j: any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+ 138:       setNewName(''); setNewUniversityId(''); setNewEnrollYear(''); setNewDan(''); setNewStance(''); setNewKana(''); setNewStudentNo(''); setNewNotes(''); setNewIsActive(true)
+ 139:       await load()
+ 140:     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 141:   }
+ 142: 
+ 143:   async function save(p: Player){
+ 144:     setLoading(true); setError(null)
+ 145:     try{
+ 146:       const token = await getToken(); if(!token) return
+ 147:       const input:any = { id:p.id, name: p.name.trim(), nameKana: p.nameKana ?? null, universityId: p.universityId ?? null, enrollYear: p.enrollYear ?? null, grade: p.grade ?? null, gradeOverride: p.gradeOverride ?? null, programYears: p.programYears ?? null, studentNo: p.studentNo ?? null, dan: p.dan ?? null, preferredStance: p.preferredStance ?? null, isActive: p.isActive ?? null, notes: p.notes ?? null }
+ 148:       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: updatePlayerMutation, variables: { input } }) })
+ 149:       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+ 150:       await load()
+ 151:     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 152:   }
+ 153: 
+ 154:   async function remove(id: string){
+ 155:     if(!confirm(t('confirm.delete'))) return
+ 156:     setLoading(true); setError(null)
+ 157:     try{
+ 158:       const token = await getToken(); if(!token) return
+ 159:       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: deletePlayerMutation, variables: { input: { id } } }) })
+ 160:       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+ 161:       await load()
+ 162:     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
+ 163:   }
+ 164: 
+ 165:   return (
+ 166:     <View>
+ 167:       <Heading level={5}>{t('admin.players.title')}</Heading>
+ 168:       <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap'}}>
+ 169:         <TextField label={t('admin.players.search')} placeholder={t('placeholders.nameFilter')} value={filter} onChange={e=> setFilter(e.target.value)} width="16rem" />
+ 170:         <TextField label={t('admin.players.newName')} value={newName} onChange={e=> setNewName(e.target.value)} width="16rem" />
+ 171:         <TextField label={t('admin.players.kana')} value={newKana} onChange={e=> setNewKana(e.target.value)} width="12rem" />
+ 172:         <TextField label={t('admin.players.studentNo')} value={newStudentNo} onChange={e=> setNewStudentNo(e.target.value)} width="12rem" />
+ 173:         <SelectField label={t('admin.players.universityReq')} value={newUniversityId} onChange={e=> setNewUniversityId(e.target.value)} width="14rem">
+ 174:           <option value="">{t('placeholders.unselected')}</option>
+ 175:           {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
+ 176:         </SelectField>
+ 177:         <Button onClick={()=> setUniModal({ open:true, name:'', shortName:'', code:'', error:null })}>
+ 178:           + {t('nav.universities')}
+ 179:         </Button>
+ 180:         <TextField label={t('admin.players.enrollYear')} type="number" value={newEnrollYear} onChange={e=> setNewEnrollYear(e.target.value)} width="9rem" />
+ 181:         <TextField label={t('admin.players.dan')} value={newDan} onChange={e=> setNewDan(e.target.value)} width="9rem" />
+ 182:         <SelectField label={t('admin.players.stance')} value={newStance} onChange={e=> setNewStance(e.target.value)} width="10rem">
+ 183:           <option value="">{t('placeholders.unselected')}</option>
+ 184:           <option value="JODAN">{t('stance.JODAN')}</option>
+ 185:           <option value="CHUDAN">{t('stance.CHUDAN')}</option>
+ 186:           <option value="NITOU_SHO">{t('stance.NITOU_SHO')}</option>
+ 187:           <option value="NITOU_GYAKU">{t('stance.NITOU_GYAKU')}</option>
+ 188:         </SelectField>
+ 189:         <SelectField label={t('admin.players.active')} value={String(newIsActive)} onChange={e=> setNewIsActive(e.target.value==='true')} width="8rem">
+ 190:           <option value="true">{t('admin.players.activeTrue')}</option>
+ 191:           <option value="false">OB/OG</option>
+ 192:         </SelectField>
+ 193:         <TextField label={t('admin.players.notes')} value={newNotes} onChange={e=> setNewNotes(e.target.value)} width="16rem" />
+ 194:         <Button onClick={add} isLoading={loading} isDisabled={!newName.trim() || !newUniversityId}>{t('actions.add')}</Button>
+ 195:         <Button variation="link" onClick={load} isLoading={loading}>{t('action.reload')}</Button>
+ 196:       </View>
+ 197:       {error && <Alert variation="error" marginTop="0.5rem">{error}</Alert>}
+ 198:       <Table highlightOnHover marginTop="0.5rem">
+ 199:         <TableHead>
+ 200:           <TableRow>
+ 201:             <TableCell as="th" width="220">{t('admin.players.th.name')}</TableCell>
+ 202:             <TableCell as="th" width="140">{t('admin.players.th.kana')}</TableCell>
+ 203:             <TableCell as="th" width="140">{t('admin.players.th.studentNo')}</TableCell>
+ 204:             <TableCell as="th" width="160">{t('admin.players.th.university')}</TableCell>
+ 205:             <TableCell as="th" width="100">{t('admin.players.th.enrollYear')}</TableCell>
+ 206:             <TableCell as="th" width="80">{t('admin.players.th.grade')}</TableCell>
+ 207:             <TableCell as="th" width="100">{t('admin.players.th.dan')}</TableCell>
+ 208:             <TableCell as="th" width="110">{t('admin.players.th.stance')}</TableCell>
+ 209:             <TableCell as="th" width="90">{t('admin.players.th.active')}</TableCell>
+ 210:             <TableCell as="th" width="200">{t('admin.players.th.notes')}</TableCell>
+ 211:             <TableCell as="th" width="160">{t('columns.actions')}</TableCell>
+ 212:           </TableRow>
+ 213:         </TableHead>
+ 214:         <TableBody>
+ 215:           {visible.map(p => (
+ 216:             <TableRow key={p.id}>
+ 217:               <TableCell>
+ 218:                 <TextField labelHidden value={p.name} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, name:v}: x)) }} />
+ 219:               </TableCell>
+ 220:               <TableCell>
+ 221:                 <TextField labelHidden value={p.nameKana ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, nameKana:v||null}: x)) }} />
+ 222:               </TableCell>
+ 223:               <TableCell>
+ 224:                 <TextField labelHidden value={p.studentNo ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, studentNo:v||null}: x)) }} />
+ 225:               </TableCell>
+ 226:               <TableCell>
+ 227:                 <SelectField labelHidden value={p.universityId ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, universityId: v||null}: x)) }}>
+ 228:                   <option value="">{t('placeholders.unselected')}</option>
+ 229:                   {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
+ 230:                 </SelectField>
+ 231:               </TableCell>
+ 232:               <TableCell>
+ 233:                 <TextField labelHidden type="number" value={String(p.enrollYear ?? '')} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, enrollYear: v? Number(v): null}: x)) }} />
+ 234:               </TableCell>
+ 235:               <TableCell>
+ 236:                 <Badge variation="info">{calcGrade(p.enrollYear) ?? '-'}</Badge>
+ 237:               </TableCell>
+ 238:               <TableCell>
+ 239:                 <TextField labelHidden value={p.dan ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, dan: v||null}: x)) }} />
+ 240:               </TableCell>
+ 241:               <TableCell>
+ 242:                 <SelectField labelHidden value={p.preferredStance ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, preferredStance: v||null}: x)) }}>
+ 243:                   <option value="">{t('placeholders.unselected')}</option>
+ 244:                   <option value="JODAN">{t('stance.JODAN')}</option>
+ 245:                   <option value="CHUDAN">{t('stance.CHUDAN')}</option>
+ 246:                   <option value="NITOU_SHO">{t('stance.NITOU_SHO')}</option>
+ 247:                   <option value="NITOU_GYAKU">{t('stance.NITOU_GYAKU')}</option>
+ 248:                 </SelectField>
+ 249:               </TableCell>
+ 250:               <TableCell>
+ 251:                 <SelectField labelHidden value={String(p.isActive ?? true)} onChange={e=> { const v=e.target.value==='true'; setPlayers(list=> list.map(x=> x.id===p.id? {...x, isActive: v}: x)) }}>
+ 252:                   <option value="true">{t('admin.players.activeTrue')}</option>
+ 253:                   <option value="false">OB/OG</option>
+ 254:                 </SelectField>
+ 255:               </TableCell>
+ 256:               <TableCell>
+ 257:                 <TextField labelHidden value={p.notes ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, notes: v||null}: x)) }} />
+ 258:               </TableCell>
+ 259:               <TableCell>
+ 260:                 <Button size="small" onClick={()=> save(players.find(x=> x.id===p.id)!)} isLoading={loading}>{t('actions.save')}</Button>
+ 261:                 <Button size="small" variation="destructive" onClick={()=> remove(p.id)} isLoading={loading} marginLeft="0.5rem">{t('actions.delete')}</Button>
+ 262:               </TableCell>
+ 263:             </TableRow>
+ 264:           ))}
+ 265:         </TableBody>
+ 266:       </Table>
+ 267:     </View>
+ 268:     {uniModal.open && (
+ 269:       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }} onClick={()=> setUniModal(m=> ({...m, open:false }))}>
+ 270:         <div style={{ background:'#fff', minWidth:320, maxWidth:560, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+ 271:           <Heading level={5}>{t('nav.universities')}</Heading>
+ 272:           <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:8 }}>
+ 273:             <TextField label={t('admin.universities.newName')} value={uniModal.name} onChange={e=> setUniModal(m=> ({...m, name:e.target.value}))} width="16rem" />
+ 274:             <TextField label={t('admin.universities.shortName')} value={uniModal.shortName} onChange={e=> setUniModal(m=> ({...m, shortName:e.target.value}))} width="10rem" />
+ 275:             <TextField label={t('admin.universities.code')} value={uniModal.code} onChange={e=> setUniModal(m=> ({...m, code:e.target.value}))} width="8rem" />
+ 276:           </div>
+ 277:           {uniModal.error && (<div style={{ color:'#b00', fontSize:12, marginTop:8 }}>{uniModal.error}</div>)}
+ 278:           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+ 279:             <Button variation="link" onClick={()=> setUniModal(m=> ({...m, open:false }))}>{t('action.reload').replace('Reload','Cancel')}</Button>
+ 280:             <Button variation="primary" onClick={quickAddUniversity}>{t('actions.add')}</Button>
+ 281:           </div>
+ 282:         </div>
+ 283:       </div>
+ 284:     )}
+ 285:   )
+ 286: }

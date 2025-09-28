@@ -1,0 +1,27 @@
+{
+  "name": "kendo-club-engine",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p amplify/tsconfig.json",
+    "tokens:css": "node scripts/figma-to-css.mjs",
+    "seed:masters": "node scripts/seedMasters.mjs",
+    "seed:initial": "node scripts/seedInitial.mjs",
+    "aggregate:rebuild": "node scripts/rebuildAggregates.mjs",
+    "sandbox": "ampx sandbox",
+    "sandbox:once": "ampx sandbox --once",
+    "verify:api": "node scripts/verifyConnection.mjs",
+    "doctor": "node scripts/doctor.mjs"
+  },
+  "optionalScripts": {
+    "wire:streams": "powershell -ExecutionPolicy Bypass -File scripts/wireStreams.ps1"
+  },
+  "devDependencies": {
+    "@aws-amplify/backend": "^1.0.0",
+    "@aws-amplify/backend-cli": "^1.0.0",
+    "aws-sdk": "^2.1489.0",
+    "cross-fetch": "^4.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}

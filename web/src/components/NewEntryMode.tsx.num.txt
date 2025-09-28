@@ -1,0 +1,282 @@
+   1: import { useEffect, useState } from 'react'
+   2: import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge } from '@aws-amplify/ui-react'
+   3: 
+   4: type Master = { code: string; nameJa?: string; nameEn?: string }
+   5: type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string }
+   6: type PointInput = { tSec: number | ''; target: string; methods: string[] }
+   7: type University = { id: string; name: string; shortName?: string|null }
+   8: type PlayerEx = { id: string; name: string; universityId?: string|null }
+   9: 
+  10: function IpponCell(props: {
+  11:   value: PointInput | null
+  12:   onChange: (next: PointInput | null) => void
+  13:   targets: Master[]
+  14:   methods: Master[]
+  15:   onFocus?: () => void
+  16: }){
+  17:   const { value, onChange, targets, methods, onFocus } = props
+  18:   const v = value ?? { tSec: 60, target: '', methods: [] }
+  19:   const valid = (v.methods.length>0) && !!v.target && (typeof v.tSec === 'number') && v.tSec >= 0
+  20:   const [open, setOpen] = useState(false)
+  21: 
+  22:   function parseTime(input: string): number | '' {
+  23:     const s = input.trim()
+  24:     if(s === '') return ''
+  25:     const mmss = s.match(/^([0-9]{1,2})[:'m]\s*([0-5]?[0-9])$/)
+  26:     if(mmss){ return Number(mmss[1])*60 + Number(mmss[2]) }
+  27:     const n = Number(s); return Number.isFinite(n) && n>=0 ? n : ''
+  28:   }
+  29: 
+  30:   return (
+  31:     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(40px,auto) 1fr 44px', gap: 4, border: valid ? '1px solid transparent' : '1px solid #e66', borderRadius:6, padding:'3px 5px' }}>
+  32:       <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+  33:         <Button size="small" variation="link" onClick={()=> { onFocus?.(); setOpen(o=> !o) }} title={open ? 'Close methods' : 'Choose methods'} style={{ minWidth:28, padding:'2px 4px' }}>
+  34:           {open ? '-' : '+'}
+  35:         </Button>
+  36:         {!open && (
+  37:           <div style={{ display:'flex', gap:2, overflow:'hidden', whiteSpace:'nowrap' }}>
+  38:             {v.methods.slice(0,2).map(m=> (
+  39:               <Badge key={m} variation="info" style={{ padding:'0 4px' }}>{m}</Badge>
+  40:             ))}
+  41:             {v.methods.length>2 && (<Badge variation="info" style={{ padding:'0 4px' }}>+{v.methods.length-2}</Badge>)}
+  42:           </div>
+  43:         )}
+  44:       </div>
+  45:       {open && (
+  46:         <div style={{ gridColumn:'1 / 3', marginTop:2, display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:3, height:108, overflowY:'auto', border:'1px solid #eee', borderRadius:6, padding:4 }}>
+  47:           {methods.map(m=> {
+  48:             const checked = v.methods.includes(m.code)
+  49:             return (
+  50:               <label key={m.code} style={{ display:'flex', alignItems:'center', gap:4, fontSize:12 }}>
+  51:                 <input type="checkbox" checked={checked} onChange={(e)=>{
+  52:                   onFocus?.();
+  53:                   if(e.target.checked) onChange({ ...v, methods: [...v.methods, m.code] })
+  54:                   else onChange({ ...v, methods: v.methods.filter(x=> x!==m.code) })
+  55:                 }} />
+  56:                 <span>{m.nameJa ?? m.code}</span>
+  57:               </label>
+  58:             )
+  59:           })}
+  60:         </div>
+  61:       )}
+  62:       <SelectField labelHidden placeholder="部位" value={v.target} onChange={(e)=> { onFocus?.(); onChange({ ...v, target: e.target.value }) }}>
+  63:         <option value=""></option>
+  64:         {targets.map(t=> (<option key={t.code} value={t.code}>{t.nameJa ?? t.code}</option>))}
+  65:       </SelectField>
+  66:       <TextField labelHidden placeholder="s" value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="46px" style={{ padding:'2px 4px' }} />
+  67:     </div>
+  68:   )
+  69: }
+  70: 
+  71: export default function NewEntryMode(props: {
+  72:   matchId: string
+  73:   setMatchId: (id: string)=> void
+  74:   matches: { id: string; heldOn: string; tournament?: string; bouts?: { items: Bout[] } }[]
+  75:   bouts: Bout[]
+  76:   players: Record<string,string>
+  77:   masters: { targets: Master[]; methods: Master[] }
+  78:   apiUrl: string
+  79:   getToken: () => Promise<string | null>
+  80:   onSaved: ()=> Promise<void> | void
+  81: }){
+  82:   const { matchId, setMatchId, matches, bouts, players, masters, apiUrl, getToken, onSaved } = props
+  83: 
+  84:   type RowState = { left1: PointInput | null; left2: PointInput | null; right1: PointInput | null; right2: PointInput | null; leftFouls: number; rightFouls: number }
+  85:   const [rows, setRows] = useState<Record<string, RowState>>({})
+  86:   const [tournament, setTournament] = useState<string>('')
+  87:   const [heldOn, setHeldOn] = useState<string>('')
+  88:   const [newLeft, setNewLeft] = useState<string>('')
+  89:   const [newRight, setNewRight] = useState<string>('')
+  90:   const [playerFilter, setPlayerFilter] = useState('')
+  91:   const [universities, setUniversities] = useState<University[]>([])
+  92:   const [playersEx, setPlayersEx] = useState<PlayerEx[]>([])
+  93:   const [ourUniversityId, setOurUniversityId] = useState<string>('')
+  94:   const [opponentUniversityId, setOpponentUniversityId] = useState<string>('')
+  95:   const [refError, setRefError] = useState<string|undefined>(undefined)
+  96:   const [dense, setDense] = useState<boolean>(true)
+  97:   const [focusBoutId, setFocusBoutId] = useState<string>('')
+  98: 
+  99:   useEffect(()=>{
+ 100:     const init: Record<string, RowState> = {}
+ 101:     for(const b of bouts){ init[b.id] = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 } }
+ 102:     setRows(init)
+ 103:     const m = matches.find(m=> m.id===matchId)
+ 104:     if(m){ setTournament(m.tournament ?? ''); setHeldOn(m.heldOn ?? ''); setOurUniversityId((m as any).ourUniversityId ?? ''); setOpponentUniversityId((m as any).opponentUniversityId ?? '') }
+ 105:     // eslint-disable-next-line react-hooks/exhaustive-deps
+ 106:   }, [bouts.map(b=> b.id).join(','), matchId])
+ 107: 
+ 108:   async function loadRefData(){
+ 109:     setRefError(undefined)
+ 110:     try{
+ 111:       const token = await getToken(); if(!token) return
+ 112:       // universities
+ 113:       const qU = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+ 114:       let ntU: string | null = null; const accU: University[] = []
+ 115:       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
+ 116:       setUniversities(accU)
+ 117:       // players with universityId
+ 118:       const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId } nextToken } }`
+ 119:       let ntP: string | null = null; const accP: PlayerEx[] = []
+ 120:       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
+ 121:       setPlayersEx(accP)
+ 122:     } catch(e:any){ setRefError('選手/所属を再読み込みしてください。') }
+ 123:   }
+ 124:   useEffect(()=>{ try{ const saved=localStorage.getItem('ui:dense'); if(saved!=null) setDense(saved==='1') }catch{}; loadRefData() }, [])
+ 125:   useEffect(()=>{ try{ localStorage.setItem('ui:dense', dense?'1':'0') }catch{} }, [dense])
+ 126:   useEffect(()=>{ if(!focusBoutId) return; setTimeout(()=>{ const el=document.getElementById(`row-${focusBoutId}`); el?.scrollIntoView({behavior:'smooth', block:'center'}) },150) }, [focusBoutId, bouts.length])
+ 127: 
+ 128:   function techniqueKey(target: string, methods: string[]) { return `${target}:${[...methods].sort().join('+')}` }
+ 129: 
+ 130:   const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
+ 131:   const createMatchMutation = `mutation CreateMatch($input: CreateMatchInput!) { createMatch(input:$input){ id heldOn tournament ourUniversityId opponentUniversityId } }`
+ 132:   const createBoutMutation = `mutation CreateBout($input: CreateBoutInput!) { createBout(input:$input){ id ourPlayerId opponentPlayerId } }`
+ 133: 
+ 134:   async function saveBout(b: Bout, s: RowState){
+ 135:     const token = await getToken(); if(!token) return
+ 136:     const payloads: any[] = []
+ 137:     const push = (side:'left'|'right', p:PointInput|null)=>{
+ 138:       if(!p) return; if(p.tSec===''||!p.target||p.methods.length===0) return
+ 139:       const scorerPlayerId = side==='left' ? b.ourPlayerId : b.opponentPlayerId
+ 140:       const opponentPlayerId = side==='left' ? b.opponentPlayerId : b.ourPlayerId
+ 141:       payloads.push({ boutId:b.id, tSec:Number(p.tSec)||0, scorerPlayerId, opponentPlayerId, position:b.ourPosition ?? null, scorerStance: side==='left' ? (b.ourStance ?? null) : (b.opponentStance ?? null), opponentStance: side==='left' ? (b.opponentStance ?? null) : (b.ourStance ?? null), judgement:'REGULAR', isDecisive:false, target:p.target, methods:p.methods, techniqueKey: techniqueKey(p.target,p.methods), recordedAt:new Date().toISOString(), version:1 })
+ 142:     }
+ 143:     push('left', s.left1); push('left', s.left2); push('right', s.right1); push('right', s.right2)
+ 144:     const foulToPoint = (penalized:'left'|'right', count:number)=>{ if(count>=2){ const scorerPlayerId = penalized==='left' ? b.opponentPlayerId : b.ourPlayerId; const opponentPlayerId = penalized==='left' ? b.ourPlayerId : b.opponentPlayerId; payloads.push({ boutId:b.id, tSec:0, scorerPlayerId, opponentPlayerId, position:b.ourPosition ?? null, scorerStance:null, opponentStance:null, judgement:'HANSOKU', isDecisive:false, techniqueKey:'HANSOKU', recordedAt:new Date().toISOString(), version:1 }) } }
+ 145:     foulToPoint('left', s.leftFouls); foulToPoint('right', s.rightFouls)
+ 146:     for(const input of payloads){ const r= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':await getToken() as any}, body: JSON.stringify({ query:createPointMutation, variables:{ input } })}); const j:any=await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)) }
+ 147:   }
+ 148: 
+ 149:   async function saveRow(b:Bout){ const s = rows[b.id]; if(!s) return; await saveBout(b,s); await onSaved() }
+ 150: 
+ 151:   async function saveAll(){ for(const b of bouts){ const s = rows[b.id]; if(!s) continue; await saveBout(b,s) } await onSaved() }\n\n  async function addNewBout(){
+ 152:     if(!newLeft || !newRight){ alert('蟾ｦ/蜿ｳ縺ｮ驕ｸ謇九ｒ驕ｸ謚槭＠縺ｦ縺上□縺輔＞'); return }
+ 153:     let useMatchId = matchId
+ 154:     const token = await getToken(); if(!token) return
+ 155:     if(!useMatchId){ if(!heldOn){ alert('譌･遞九ｒ蜈･蜉帙＠縺ｦ縺上□縺輔＞'); return } if(!ourUniversityId || !opponentUniversityId){ alert('閾ｪ謇螻・逶ｸ謇区園螻槭ｒ驕ｸ謚槭＠縺ｦ縺上□縺輔＞'); return } const input:any = { heldOn, tournament: tournament||null, ourUniversityId, opponentUniversityId }; const r= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createMatchMutation, variables:{ input } })}); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); useMatchId = j.data.createMatch.id; setMatchId(useMatchId) }
+ 156:     const boutInput:any = { matchId: useMatchId, ourPlayerId: newLeft, opponentPlayerId: newRight, ourPosition:null, ourStance:null, opponentStance:null, winType:null }
+ 157:     const r2= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createBoutMutation, variables:{ input:boutInput } })}); const j2:any= await r2.json(); if(j2.errors) throw new Error(JSON.stringify(j2.errors)); const newId = j2.data.createBout.id as string; setFocusBoutId(newId); setNewLeft(''); setNewRight(''); await onSaved()
+ 158:   }
+ 159: 
+ 160:   function buildPlayerOptionsEx(list: PlayerEx[], unis: University[], filter: string){
+ 161:     const f = filter.trim().toLowerCase(); const grouped: Record<string, PlayerEx[]> = {}
+ 162:     for(const p of list){ if(f && !p.name.toLowerCase().includes(f)) continue; const key = p.universityId ?? 'unknown'; (grouped[key]??=[]).push(p) }
+ 163:     const order = Object.keys(grouped).sort((a,b)=> (a==='unknown'?'ZZZ':a).localeCompare(b==='unknown'?'ZZZ':b))
+ 164:     const opts:any[]=[]; for(const key of order){ const label = key==='unknown' ? '謇螻樊悴險ｭ螳・ : (unis.find(u=> u.id===key)?.name ?? key); const children = grouped[key].sort((a,b)=> a.name.localeCompare(b.name,'ja')).map(p=> (<option key={p.id} value={p.id}>{p.name}</option>)); opts.push(<optgroup key={key} label={label}>{children}</optgroup>) }
+ 165:     return opts
+ 166:   }
+ 167: 
+ 168:   return (
+ 169:     <View>
+ 170:             <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'flex-end'}}>
+ 171:         <SelectField label="大会/日程" value={matchId} onChange={e=> setMatchId(e.target.value)} size="small">
+ 172:           <option value="">選択してください</option>
+ 173:           {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
+ 174:         </SelectField>
+ 175:         <TextField label="大会名" value={tournament} onChange={e=> setTournament(e.target.value)} width={dense?"12rem":"16rem"} />
+ 176:         <TextField label="日程" type="date" value={heldOn} onChange={e=> setHeldOn(e.target.value)} width={dense?"10rem":"12rem"} />
+ 177:         <SelectField label="自所属" value={ourUniversityId} onChange={e=> setOurUniversityId(e.target.value)} size="small" isDisabled={!!matchId}>
+ 178:           <option value="">未選択</option>
+ 179:           {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
+ 180:         </SelectField>
+ 181:         <SelectField label="相手所属" value={opponentUniversityId} onChange={e=> setOpponentUniversityId(e.target.value)} size="small" isDisabled={!!matchId}>
+ 182:           <option value="">未選択</option>
+ 183:           {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
+ 184:         </SelectField>
+ 185:         <Button size="small" variation="primary" onClick={saveAll} isDisabled={bouts.length===0}>一括保存</Button>
+ 186:         <Button size="small" variation="link" onClick={()=> setDense(d=> !d)}>{dense? '標準表示にする':'縮小表示にする'}</Button>
+ 187:       </View>
+ 188:             <View marginBottom="0.25rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'center'}}>
+ 189:         <TextField label="選手検索" placeholder="名前フィルタ" value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
+ 190:         <Button size="small" onClick={loadRefData}>選手/所属を再読み込み</Button>
+ 191:       </View>
+ 192:       {refError && (<div style={{ color:'#b00', fontSize:12, marginBottom:6 }}>{refError}</div>)}
+ 193: 
+ 194:       <Table variation="bordered" highlightOnHover style={{ fontSize: dense? 12: 14, lineHeight: dense? 1.2: 1.4 }}>
+ 195:                 <TableHead>
+ 196:           <TableRow>
+ 197:             <TableCell as="th" width="16%">左選手</TableCell>
+ 198:             <TableCell as="th" width="16%">A 一本目</TableCell>
+ 199:             <TableCell as="th" width="16%">A 二本目</TableCell>
+ 200:             <TableCell as="th" width="16%">B 一本目</TableCell>
+ 201:             <TableCell as="th" width="16%">B 二本目</TableCell>
+ 202:             <TableCell as="th" width="16%">右選手</TableCell>
+ 203:             <TableCell as="th" width="8%">操作</TableCell>
+ 204:           </TableRow>
+ 205:           <TableRow>
+ 206:             <TableCell>
+ 207:               <select value={newLeft} onChange={e=> setNewLeft(e.target.value)} style={{ width:'100%' }}>
+ 208:                 <option value="">左選手を選択</option>
+ 209:                 {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
+ 210:               </select>
+ 211:             </TableCell>
+ 212:             <TableCell colSpan={3}>
+ 213:               <div style={{ color:'#666', fontSize:12 }}>新しい試合を追加するには選手を選んで「追加」を押してください。</div>
+ 214:             </TableCell>
+ 215:             <TableCell>
+ 216:               <select value={newRight} onChange={e=> setNewRight(e.target.value)} style={{ width:'100%' }}>
+ 217:                 <option value="">右選手を選択</option>
+ 218:                 {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
+ 219:               </select>
+ 220:             </TableCell>
+ 221:             <TableCell>
+ 222:               <Button size="small" onClick={addNewBout} isDisabled={!newLeft || !newRight}>追加</Button>
+ 223:             </TableCell>
+ 224:           </TableRow>
+ 225:         </TableHead>
+ 226:         <TableBody>
+ 227:           {bouts.map((b)=>{
+ 228:             const s = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 }
+ 229:             const rowValid = [s.left1, s.left2, s.right1, s.right2].every(ipponValidOrEmpty)
+ 230:             return (
+ 231:               <TableRow key={b.id} id={`row-${b.id}`}>
+ 232:                 <TableCell>
+ 233:                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+ 234:                     <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#156a15' : '#2f4f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{players[b.ourPlayerId] ?? b.ourPlayerId}</div>
+ 235:                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+ 236:                       <Button size="small" variation="link" title="蜿榊援-" onClick={()=> setRows(r=> ({...r, [b.id]: { ...s, leftFouls: Math.max(0, (s.leftFouls||0)-1) }}))} style={{ minWidth:22, padding:'0 4px' }}>-</Button>
+ 237:                       <Badge variation={s.leftFouls>=2 && (\n                      <div><Badge variation="warning" style={{ padding:'0 4px' }}>反則一本</Badge></div>\n                    )}
+ 238:                   </div>
+ 239:                 </TableCell>
+ 240:                 <TableCell>
+ 241:                   <IpponCell value={s.left1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left1: next }}))} targets={masters.targets} methods={masters.methods} />
+ 242:                 </TableCell>
+ 243:                 <TableCell>
+ 244:                   <IpponCell value={s.left2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left2: next }}))} targets={masters.targets} methods={masters.methods} />
+ 245:                 </TableCell>
+ 246:                 <TableCell>
+ 247:                   <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={masters.targets} methods={masters.methods} />
+ 248:                 </TableCell>
+ 249:                 <TableCell>
+ 250:                   <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={masters.targets} methods={masters.methods} />
+ 251:                 </TableCell>
+ 252:                 <TableCell>
+ 253:                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
+ 254:                     <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#8a1b1b' : '#4f2f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{players[b.opponentPlayerId] ?? b.opponentPlayerId}</div>
+ 255:                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+ 256:                       <Button size="small" variation="link" title="蜿榊援-" onClick={()=> setRows(r=> ({...r, [b.id]: { ...s, rightFouls: Math.max(0, (s.rightFouls||0)-1) }}))} style={{ minWidth:22, padding:'0 4px' }}>-</Button>
+ 257:                       <Badge variation={s.rightFouls>=2 && (\n                      <div><Badge variation="warning" style={{ padding:'0 4px' }}>相手反則一本</Badge></div>\n                    )}
+ 258:                   </div>
+ 259:                 </TableCell>
+ 260:                 <TableCell>
+ 261:                   {!rowValid && (<div style={{ color:'#d17', fontSize:12, marginBottom:4 }}>未完成の入力があります</div>)}
+ 262:                   <Button size="small" onClick={()=> saveRow(b)} isDisabled={!rowValid}>保存</Button>
+ 263:                 </TableCell>
+ 264:               </TableRow>
+ 265:             )
+ 266:           })}
+ 267:         </TableBody>
+ 268:       </Table>
+ 269:     </View>
+ 270:   )
+ 271: }
+ 272: 
+ 273: function ipponValidOrEmpty(v: PointInput | null){ if(!v) return true; const empty = (!v.target && v.methods.length===0 && (v.tSec==='' || v.tSec===undefined)); if(empty) return true; const valid = (v.methods.length>0) && !!v.target && typeof v.tSec==='number' && v.tSec>=0; return valid }
+ 274: 
+ 275: 
+ 276: 
+ 277: 
+ 278: 
+ 279: 
+ 280: 
+ 281: 
+ 282: 

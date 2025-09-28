@@ -1,0 +1,9 @@
+          })}
+        </div>
+      )}
+      <SelectField labelHidden placeholder="•”ˆÊ" value={v.target} onChange={(e)=> { onFocus?.(); onChange({ ...v, target: e.target.value }) }}>
+        <option value=""></option>
+        {targets.map(t=> (<option key={t.code} value={t.code}>{t.nameJa ?? t.code}</option>))}
+      </SelectField>
+      <TextField labelHidden placeholder="s" value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="46px" style={{ padding:'2px 4px' }} />
+    </div>

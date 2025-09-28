@@ -1,0 +1,17 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:UpdateItem",
+        "dynamodb:DescribeTable"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:ap-northeast-1:471112900075:table/AggregatePlayerTargetDaily-st2f47v5fzdh7afugbxxz5f2bq-NONE",
+        "arn:aws:dynamodb:ap-northeast-1:471112900075:table/AggregatePlayerMethodDaily-st2f47v5fzdh7afugbxxz5f2bq-NONE"
+      ]
+    }
+  ]
+}
+

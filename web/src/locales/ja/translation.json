@@ -1,0 +1,267 @@
+﻿{
+    "labels":  {
+                   "match":  "試合/日付",
+                   "tournament":  "大会名",
+                   "date":  "日付",
+                   "ourUniversity":  "自所属",
+                   "opponentUniversity":  "相手所属",
+                   "searchPlayer":  "選手検索",
+                   "universityUnknown":  "所属未設定",
+                   "official":  "公式戦",
+                   "practice":  "練習試合",
+                   "intra":  "部内戦"
+               },
+    "columns":  {
+                    "leftPlayer":  "左選手",
+                    "rightPlayer":  "右選手",
+                    "first":  "一本目",
+                    "second":  "二本目",
+                    "actions":  "操作"
+                },
+    "actions":  {
+                    "saveAll":  "一括保存",
+                    "switchStandard":  "標準表示にする",
+                    "switchDense":  "縮小表示にする",
+                    "reloadRefs":  "選手/所属を再読み込み",
+                    "add":  "追加",
+                    "save":  "保存",
+                    "foulPlus":  "反則+",
+                    "foulMinus":  "反則-",
+                    "foul":  "反則",
+                    "delete":  "削除",
+                    "deleteMatch":  "試合を削除",
+                    "purgeAllMatches":  "試合データ全削除"
+                },
+    "placeholders":  {
+                         "select":  "選択してください",
+                         "unselected":  "未選択",
+                         "nameFilter":  "名前フィルタ",
+                         "selectLeft":  "左選手を選択",
+                         "selectRight":  "右選手を選択"
+                     },
+    "ipponCell":  {
+                      "chooseMethods":  "技を選択",
+                      "closeMethods":  "閉じる",
+                      "targetPlaceholder":  "技",
+                      "secondsPlaceholder":  "秒"
+                  },
+    "badges":  {
+                   "opponentFoulIppon":  "相手反則一本",
+                   "foulIppon":  "反則一本",
+                   "foulCountFmt":  "反則数: {{count}}（2で相手に一本）"
+               },
+    "warnings":  {
+                     "incompleteInputs":  "未完了の入力があります"
+                 },
+    "alerts":  {
+                   "selectPlayers":  "左/右の選手を選択してください",
+                   "enterDate":  "日付を入力してください",
+                   "selectUniversities":  "自所属と相手所属を選択してください"
+               },
+    "errors":  {
+                   "refDataLoadFailed":  "参照データの取得に失敗しました。再読み込みしてください。",
+                   "universityRequired":  "所属は必須です",
+                   "notSignedIn":  "サインインされていません。サインインしてください"
+               },
+    "nav":  {
+                "playersRegister":  "選手登録",
+                "universities":  "所属（大学）"
+            },
+    "field":  {
+                  "decidingStrike":  "決勝打",
+                  "scorer":  "得点側",
+                  "judgement":  "判定",
+                  "match":  "試合",
+                  "bout":  "対戦",
+                  "timeSec":  "時間(秒)",
+                  "target":  "技",
+                  "method":  "技"
+              },
+    "label":  {
+                  "foulPoint":  "反則一本"
+              },
+    "team":  {
+                 "our":  "自チーム",
+                 "opponent":  "相手"
+             },
+    "judgement":  {
+                      "REGULAR":  "通常",
+                      "ENCHO":  "延長",
+                      "HANSOKU":  "反則"
+                  },
+    "action":  {
+                   "add":  "追加",
+                   "reload":  "再読み込み",
+                   "signOut":  "サインアウト",
+                   "cancel":  "キャンセル",
+                   "delete":  "削除"
+               },
+    "tab":  {
+                "new":  "新規",
+                "input":  "入力",
+                "dashboard":  "ダッシュボード",
+                "team":  "団体"
+            },
+    "section":  {
+                    "dualPane":  "左右同時入力",
+                    "legacyInput":  "従来入力"
+                },
+    "app":  {
+                "title":  "Kendo Club Engine"
+            },
+    "left":  "左",
+    "right":  "右",
+    "toggle":  {
+                   "legacy":  {
+                                  "hide":  "従来入力を隠す",
+                                  "show":  "従来入力を表示"
+                              }
+               },
+    "placeholder":  {
+                        "select":  "選択してください"
+                    },
+    "admin":  {
+                  "players":  {
+                                  "title":  "選手登録",
+                                  "search":  "検索",
+                                  "newName":  "新規選手名",
+                                  "kana":  "かな",
+                                  "studentNo":  "学籍番号",
+                                  "universityReq":  "所属（必須）",
+                                  "enrollYear":  "入学年",
+                                  "dan":  "段級位",
+                                  "stance":  "構え",
+                                  "active":  "在籍",
+                                  "activeTrue":  "在籍",
+                                  "notes":  "備考",
+                                  "th":  {
+                                             "name":  "名前",
+                                             "kana":  "かな",
+                                             "studentNo":  "学籍番号",
+                                             "university":  "所属",
+                                             "enrollYear":  "入学年",
+                                             "grade":  "学年",
+                                             "dan":  "段級位",
+                                             "stance":  "構え",
+                                             "active":  "在籍",
+                                             "notes":  "備考"
+                                         }
+                              },
+                  "universities":  {
+                                       "title":  "大学（所属）登録",
+                                       "search":  "検索",
+                                       "newName":  "大学名（新規）",
+                                       "shortName":  "略称",
+                                       "code":  "コード",
+                                       "home":  "ホーム",
+                                       "th":  {
+                                                  "name":  "名称",
+                                                  "shortName":  "略称",
+                                                  "code":  "コード",
+                                                  "home":  "ホーム"
+                                              },
+                                       "errors":  {
+                                                      "duplicateName":  "大学名が重複しています。",
+                                                      "duplicateCode":  "大学コードが重複しています。",
+                                                      "requiredName":  "名称は必須です。"
+                                                  }
+                                   }
+              },
+    "confirm":  {
+                    "delete":  "このプレイヤーを削除しますか？",
+                    "deleteBoutTitle":  "対戦の削除",
+                    "deleteBoutBody":  "この対戦を削除します。よろしいですか？",
+                    "deleteBoutNote":  "登録済みの得点データも削除されます。",
+                    "deleteMatchTitle":  "試合の削除",
+                    "deleteMatchBody":  "この試合とすべての対戦・得点を削除します。よろしいですか？",
+                    "deleteMatchNote":  "取り消しはできません。"
+                },
+    "stance":  {
+                   "JODAN":  "上段",
+                   "CHUDAN":  "中段",
+                   "NITOU_SHO":  "二刀（正）",
+                   "NITOU_GYAKU":  "二刀（逆）"
+               },
+    "hints":  {
+                  "noDataToSave":  "保存対象がありません（引き分け／変更なし）",
+                  "addNewMatch":  "新しい対戦を追加するには選手を選んで『追加』を押してください",
+                  "saveAutoJudgement":  "保存時に自動判定（無得点なら引き分け、一本なら一本勝ち、二本なら二本勝ち）"
+              },
+    "rules":  {
+                  "allowEncho":  "延長あり",
+                  "allowHantei":  "判定あり",
+                  "autoResult":  "保存時に結果を自動更新"
+              },
+    "notices":  {
+                    "saved":  "保存しました。"
+                },
+    "result":  {
+                   "win":  "勝ち",
+                   "loss":  "負け",
+                   "draw":  "引き分け",
+                   "unknown":  "未確定"
+               },
+    "winType":  {
+                    "IPPON":  "一本",
+                    "NIHON":  "二本",
+                    "HANSOKU":  "反則",
+                    "ENCHO":  "延長",
+                    "HANTEI":  "判定",
+                    "DRAW":  "引き分け"
+                },
+    "resultEditor":  {
+                         "set":  "結果を設定"
+                     },
+    "dashboard":  {
+                      "title":  "ダッシュボード",
+                      "selectPlayer":  "選手",
+                      "stats":  "統計",
+                      "bouts":  "対戦数",
+                      "wins":  "勝ち",
+                      "losses":  "負け",
+                      "draws":  "引き分け",
+                      "winRate":  "勝率",
+                      "pointsFor":  "獲得本数",
+                      "pointsAgainst":  "被本数",
+                      "avgTimeToScore":  "平均得点時間",
+                      "topCombinedFor":  "取得技（上位）",
+                      "topCombinedAgainst":  "被取得技（上位）",
+                      "pieFor":  "取得技の分布",
+                      "pieAgainst":  "被取得技の分布",
+                      "vsOpponents":  "対戦相手別",
+                      "opponent":  "相手",
+                      "noData":  "選手を選択すると統計が表示されます",
+                      "from":  "開始日",
+                      "to":  "終了日",
+                      "tournament":  "大会名",
+                      "tournamentPh":  "名称でフィルタ",
+                      "topN":  "上位N",
+                      "clear":  "クリア",
+                      "fastest":  "最速",
+                      "slowest":  "最遅",
+                      "pointsPerBout":  "平均本数/試合",
+                      "diff":  "本数差",
+                      "teamTitle":  "団体ダッシュボード",
+                      "selectTeam":  "団体",
+                      "matchSummary":  "試合結果（団体）",
+                      "teamWins":  "団体勝",
+                      "oppWins":  "相手勝",
+                      "tournamentRanking":  "大会別ランキング",
+                      "matches":  "試合数",
+                      "playerContribution":  "選手貢献",
+                      "player":  "選手"
+                  },
+    "filters":  {
+                    "type":  "種別",
+                    "all":  "すべて",
+                    "official":  "公式戦のみ",
+                    "practice":  "練習試合のみ",
+                    "intra":  "部内戦のみ"
+                },
+    "export":  {
+                   "print":  "印刷",
+                   "players":  "選手貢献をCSV出力",
+                   "tournaments":  "大会別成績をCSV出力",
+                   "vsTeams":  "対戦団体成績をCSV出力"
+               }
+}
