@@ -1,11 +1,15 @@
-version: 1
+﻿version: 1
 backend:
   phases:
     build:
       commands:
         - npm ci --cache .npm --prefer-offline
         # Generate outputs for this app/branch (Gen 2). No app-id needed when running inside the same Amplify App.
-        - npx ampx generate outputs --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
+        - |
+          APP_ID="${BACKEND_APP_ID:-${AMPLIFY_APP_ID:-$AWS_APP_ID}}"
+          if [ -z "$APP_ID" ]; then echo "APP_ID unresolved. Set BACKEND_APP_ID in Amplify Console env vars."; exit 1; fi
+          echo "Generating outputs for app=$APP_ID branch=$AWS_BRANCH"
+          npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
   artifacts:
     baseDirectory: .
     files:
@@ -28,3 +32,4 @@ frontend:
       - .npm/**/*
       - node_modules/**/*
       - web/node_modules/**/*
+
