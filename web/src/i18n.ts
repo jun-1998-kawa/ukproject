@@ -14,7 +14,7 @@ i18n
       en: { translation: en },
     },
     supportedLngs: ['en', 'ja'],
-    fallbackLng: ['en', 'ja'],
+    fallbackLng: ['ja', 'en'],
     interpolation: { escapeValue: false },
     returnEmptyString: false,
     parseMissingKeyHandler: (key) => {
@@ -31,4 +31,5 @@ i18n
   })
 
 export default i18n
+
 
