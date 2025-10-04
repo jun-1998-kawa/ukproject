@@ -287,10 +287,19 @@ export default function App() {
             </nav>
           </aside>
           <main className="app-main">
-          
-
-          
-
+            {tab==='new' ? (
+              <NewEntryMode
+                matchId={selectedMatchId}
+                setMatchId={setSelectedMatchId}
+                matches={matches as any}
+                bouts={(selectedMatch as any)?.bouts?.items ?? []}
+                players={players}
+                masters={{ targets: masters.targets as any, methods: masters.methods as any }}
+                apiUrl={apiUrl}
+                getToken={getToken}
+                onSaved={fetchMatches}
+              />
+            ) : null}
 
           {tab==='players' && (<PlayersAdmin apiUrl={apiUrl} getToken={getToken} />)}
           {tab==='universities' && (<UniversitiesAdmin apiUrl={apiUrl} getToken={getToken} />)}
