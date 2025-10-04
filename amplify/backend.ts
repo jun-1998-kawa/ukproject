@@ -1,7 +1,7 @@
-import { defineBackend } from "@aws-amplify/backend";
-import { auth } from "./auth/resource";
-import { data } from "./data/resource";
-import { aggStream } from "./functions/aggStream/resource";
+﻿import { defineBackend } from "@aws-amplify/backend";
+import { auth } from "./auth/resource.ts";
+import { data } from "./data/resource.ts";
+import { aggStream } from "./functions/aggStream/resource.ts";
 
 // Central backend composition for Amplify Gen 2
 export const backend = defineBackend({
@@ -9,3 +9,4 @@ export const backend = defineBackend({
   data,
   aggStream,
 });
+
