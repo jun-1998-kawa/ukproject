@@ -5,14 +5,34 @@ backend:
       commands:
         - npm ci --cache .npm --prefer-offline
         - |
-          APP_ID="${BACKEND_APP_ID:-${AMPLIFY_APP_ID:-$AWS_APP_ID}}"
-          if [ -z "$APP_ID" ]; then
-            echo "APP_ID unresolved. Set BACKEND_APP_ID in Amplify Console env vars."; exit 1
+          set -e
+          if [ -n "$BACKEND_APP_ID" ]; then APP_ID="$BACKEND_APP_ID"; elif [ -n "$AMPLIFY_APP_ID" ]; then APP_ID="$AMPLIFY_APP_ID"; else APP_ID="$AWS_APP_ID"; fi
+          if [ -z "$APP_ID" ]; then echo "APP_ID unresolved. Set BACKEND_APP_ID in Amplify Console env vars."; exit 1; fi
+          echo "[Backend] App=$APP_ID Branch=$AWS_BRANCH Region=$AWS_REGION"
+          echo "[Backend] Deploying backend (pipeline-deploy)"
+          if ! npx ampx pipeline-deploy --app-id "$APP_ID" --branch "$AWS_BRANCH"; then
+            echo "[Backend] pipeline-deploy failed; trying ampx push as fallback"
+            npx ampx push --app-id "$APP_ID" --branch "$AWS_BRANCH"
           fi
-          echo "Deploying backend for app=$APP_ID branch=$AWS_BRANCH"
-          npx ampx pipeline-deploy --app-id "$APP_ID" --branch "$AWS_BRANCH"
-          echo "Generating outputs (amplify_outputs.json) for app=$APP_ID branch=$AWS_BRANCH"
-          npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
+          echo "[Backend] Resolving CFN stack name..."
+          STACKS="$(aws cloudformation list-stacks --output text --query 'StackSummaries[].StackName' 2>/dev/null || true)"
+          STACK=""
+          if [ -n "$STACKS" ]; then
+            CAND1="^amplify-$APP_ID-$AWS_BRANCH-"
+            CAND2="^amplify-$APP_ID-$AWS_BRANCH-branch-"
+            STACK="$(echo "$STACKS" | tr '\t' '\n' | grep -E "$CAND1" | head -n1 || true)"
+            if [ -z "$STACK" ]; then
+              STACK="$(echo "$STACKS" | tr '\t' '\n' | grep -E "$CAND2" | head -n1 || true)"
+            fi
+          fi
+          if [ -z "$STACK" ]; then
+            echo "[Backend] Could not resolve CFN stack for app=$APP_ID branch=$AWS_BRANCH"
+            echo "$STACKS" | tr '\t' '\n'
+            exit 1
+          fi
+          echo "[Backend] Using stack: $STACK"
+          echo "[Backend] Generating outputs (amplify_outputs.json)"
+          npx ampx generate outputs --stack "$STACK" --outputs-version 1.4 --out-dir .
   artifacts:
     baseDirectory: .
     files:
@@ -35,4 +55,3 @@ frontend:
       - .npm/**/*
       - node_modules/**/*
       - web/node_modules/**/*
-
