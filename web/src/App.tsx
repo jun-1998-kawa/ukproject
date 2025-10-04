@@ -88,7 +88,7 @@ export default function App() {
     try{
       const KEY = 'app:reset-once:20250924-1'
       if(!localStorage.getItem(KEY)){
-        ;['ui:dense','rules:encho','rules:hantei','rules:autoResult','i18nextLng'].forEach(k=> localStorage.removeItem(k))
+        ;['ui:dense','rules:encho','rules:hantei','rules:autoResult'].forEach(k=> localStorage.removeItem(k))
         localStorage.setItem(KEY,'1')
         if(typeof window!=='undefined') window.location.reload()
       }
@@ -534,6 +534,7 @@ export default function App() {
     </Authenticator>
   )
 }
+
 
 
 
