@@ -121,6 +121,15 @@ export default function NewEntryMode(props: {
 }){
   const { t } = useTranslation()
   const { matchId, setMatchId, matches, bouts, players, masters, apiUrl, getToken, onSaved } = props
+  // Fallback masters when API returns empty on prod
+  const fallbackTargets: Master[] = [
+    { code: 'MEN', nameJa: '面', nameEn: 'Men' },
+    { code: 'KOTE', nameJa: '小手', nameEn: 'Kote' },
+    { code: 'DO', nameJa: '胴', nameEn: 'Do' },
+    { code: 'TSUKI', nameJa: '突き', nameEn: 'Tsuki' },
+  ]
+  const safeTargets = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets
+  const safeMethods = masters.methods || []
 
   type RowState = { left1: PointInput | null; left2: PointInput | null; right1: PointInput | null; right2: PointInput | null; leftFouls: number; rightFouls: number }
   const [rows, setRows] = useState<Record<string, RowState>>({})
@@ -433,16 +442,16 @@ export default function NewEntryMode(props: {
                   </div>
                 </TableCell>
                 <TableCell>
-                  <IpponCell value={s.left1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left1: next }}))} targets={masters.targets} methods={masters.methods} />
+                    <IpponCell value={s.left1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left1: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                  <IpponCell value={s.left2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left2: next }}))} targets={masters.targets} methods={masters.methods} />
+                    <IpponCell value={s.left2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                  <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={masters.targets} methods={masters.methods} />
+                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                  <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={masters.targets} methods={masters.methods} />
+                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
