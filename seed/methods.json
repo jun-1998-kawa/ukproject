@@ -1,28 +1,86 @@
-﻿[
-  { "code": "SURIAGE", "nameJa": "すり上げ", "nameEn": "Suriage", "order": 1, "active": true },
-  { "code": "KAESHI",  "nameJa": "返し",     "nameEn": "Kaeshi",  "order": 2, "active": true },
-  { "code": "NUKI",    "nameJa": "抜き",     "nameEn": "Nuki",    "order": 3, "active": true },
-  { "code": "DEBANA",  "nameJa": "出ばな",   "nameEn": "Debana",  "order": 4, "active": true },
-  { "code": "HIKI",    "nameJa": "引き",     "nameEn": "Hiki",    "order": 5, "active": true },
-  { "code": "HARAI",   "nameJa": "払い",     "nameEn": "Harai",   "order": 6, "active": true },
-  { "code": "TOBIKOMI","nameJa": "飛び込み", "nameEn": "Tobikomi","order": 7, "active": true },
-  { "code": "KATSUGI", "nameJa": "担ぎ",     "nameEn": "Katsugi", "order": 8, "active": true },
-  { "code": "RENZOKU", "nameJa": "連続",     "nameEn": "Renzoku", "order": 9, "active": true },
-  { "code": "GYAKU",   "nameJa": "逆",       "nameEn": "Gyaku",   "order": 10, "active": true },
-  { "code": "HIDARI",  "nameJa": "左",       "nameEn": "Left",    "order": 11, "active": true },
-  { "code": "AIKOTE",  "nameJa": "相小手",   "nameEn": "Aikote",  "order": 12, "active": true }
-]
 [
-  { "code": "SURIAGE", "nameJa": "すり上げ", "nameEn": "Suriage", "order": 1, "active": true },
-  { "code": "KAESHI",  "nameJa": "返し",     "nameEn": "Kaeshi",  "order": 2, "active": true },
-  { "code": "NUKI",    "nameJa": "抜き",     "nameEn": "Nuki",    "order": 3, "active": true },
-  { "code": "DEBANA",  "nameJa": "出ばな",   "nameEn": "Debana",  "order": 4, "active": true },
-  { "code": "HIKI",    "nameJa": "引き",     "nameEn": "Hiki",    "order": 5, "active": true },
-  { "code": "HARAI",   "nameJa": "払い",     "nameEn": "Harai",   "order": 6, "active": true },
-  { "code": "TOBIKOMI","nameJa": "飛び込み", "nameEn": "Tobikomi","order": 7, "active": true },
-  { "code": "KATSUGI", "nameJa": "担ぎ",     "nameEn": "Katsugi", "order": 8, "active": true },
-  { "code": "RENZOKU", "nameJa": "連続",     "nameEn": "Renzoku", "order": 9, "active": true },
-  { "code": "GYAKU",   "nameJa": "逆",       "nameEn": "Gyaku",   "order": 10, "active": true },
-  { "code": "HIDARI",  "nameJa": "左",       "nameEn": "Left",    "order": 11, "active": true },
-  { "code": "AIKOTE",  "nameJa": "相小手",   "nameEn": "Aikote",  "order": 12, "active": true }
+  {
+    "code": "SURIAGE",
+    "nameJa": "すり上げ",
+    "nameEn": "Suriage",
+    "order": 1,
+    "active": true
+  },
+  {
+    "code": "KAESHI",
+    "nameJa": "返し",
+    "nameEn": "Kaeshi",
+    "order": 2,
+    "active": true
+  },
+  {
+    "code": "NUKI",
+    "nameJa": "抜き",
+    "nameEn": "Nuki",
+    "order": 3,
+    "active": true
+  },
+  {
+    "code": "DEBANA",
+    "nameJa": "出ばな",
+    "nameEn": "Debana",
+    "order": 4,
+    "active": true
+  },
+  {
+    "code": "HIKI",
+    "nameJa": "引き",
+    "nameEn": "Hiki",
+    "order": 5,
+    "active": true
+  },
+  {
+    "code": "HARAI",
+    "nameJa": "払い",
+    "nameEn": "Harai",
+    "order": 6,
+    "active": true
+  },
+  {
+    "code": "TOBIKOMI",
+    "nameJa": "飛び込み",
+    "nameEn": "Tobikomi",
+    "order": 7,
+    "active": true
+  },
+  {
+    "code": "KATSUGI",
+    "nameJa": "担ぎ",
+    "nameEn": "Katsugi",
+    "order": 8,
+    "active": true
+  },
+  {
+    "code": "RENZOKU",
+    "nameJa": "連続",
+    "nameEn": "Renzoku",
+    "order": 9,
+    "active": true
+  },
+  {
+    "code": "GYAKU",
+    "nameJa": "逆",
+    "nameEn": "Gyaku",
+    "order": 10,
+    "active": true
+  },
+  {
+    "code": "HIDARI",
+    "nameJa": "左",
+    "nameEn": "Left",
+    "order": 11,
+    "active": true
+  },
+  {
+    "code": "AIKOTE",
+    "nameJa": "相小手",
+    "nameEn": "Aikote",
+    "order": 12,
+    "active": true
+  }
 ]

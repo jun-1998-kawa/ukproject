@@ -1,14 +1,37 @@
-﻿[
-  { "code": "SENPO",   "nameJa": "先鋒", "nameEn": "Senpo",   "order": 1, "active": true },
-  { "code": "JIHO",    "nameJa": "次鋒", "nameEn": "Jiho",    "order": 2, "active": true },
-  { "code": "CHUKEN",  "nameJa": "中堅", "nameEn": "Chuken",  "order": 3, "active": true },
-  { "code": "FUKUSHO", "nameJa": "副将", "nameEn": "Fukusho", "order": 4, "active": true },
-  { "code": "TAISHO",  "nameJa": "大将", "nameEn": "Taisho",  "order": 5, "active": true }
-]
 [
-  { "code": "SENPO",   "nameJa": "先鋒", "nameEn": "Senpo",   "order": 1, "active": true },
-  { "code": "JIHO",    "nameJa": "次鋒", "nameEn": "Jiho",    "order": 2, "active": true },
-  { "code": "CHUKEN",  "nameJa": "中堅", "nameEn": "Chuken",  "order": 3, "active": true },
-  { "code": "FUKUSHO", "nameJa": "副将", "nameEn": "Fukusho", "order": 4, "active": true },
-  { "code": "TAISHO",  "nameJa": "大将", "nameEn": "Taisho",  "order": 5, "active": true }
+  {
+    "code": "SENPO",
+    "nameJa": "先鋒",
+    "nameEn": "Senpo",
+    "order": 1,
+    "active": true
+  },
+  {
+    "code": "JIHO",
+    "nameJa": "次鋒",
+    "nameEn": "Jiho",
+    "order": 2,
+    "active": true
+  },
+  {
+    "code": "CHUKEN",
+    "nameJa": "中堅",
+    "nameEn": "Chuken",
+    "order": 3,
+    "active": true
+  },
+  {
+    "code": "FUKUSHO",
+    "nameJa": "副将",
+    "nameEn": "Fukusho",
+    "order": 4,
+    "active": true
+  },
+  {
+    "code": "TAISHO",
+    "nameJa": "大将",
+    "nameEn": "Taisho",
+    "order": 5,
+    "active": true
+  }
 ]
