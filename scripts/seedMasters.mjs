@@ -41,7 +41,9 @@ async function gql(url, token, region, query, variables) {
 }
 
 async function loadJSON(p) {
-  return JSON.parse(await readFile(p, 'utf-8'));
+  const raw = await readFile(p, 'utf-8');
+  const clean = raw.replace(/^\uFEFF/, ''); // strip BOM if present
+  return JSON.parse(clean);
 }
 
 async function seed(kind, items, url, token, region) {
