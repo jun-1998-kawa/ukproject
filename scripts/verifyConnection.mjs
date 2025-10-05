@@ -10,7 +10,11 @@ async function main() {
   const region = outputs?.data?.aws_region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
   if (!url) throw new Error('data.url missing in amplify_outputs.json');
 
-  const query = `query { listTargetMasters { items { code nameJa nameEn active order } } }`;
+  const query = `query {
+    listTargetMasters { items { code nameJa nameEn active order } }
+    listMethodMasters { items { code nameJa nameEn active order } }
+    listPositionMasters { items { code nameJa nameEn active order } }
+  }`;
   const token = process.env.SEED_AUTH_TOKEN;
   const forceIAM = String(process.env.SEED_AUTH_MODE||'').toUpperCase()==='IAM';
   let json;
@@ -55,9 +59,17 @@ async function main() {
     console.error('GraphQL errors:', JSON.stringify(json.errors, null, 2));
     process.exit(2);
   }
-  const items = json?.data?.listTargetMasters?.items ?? [];
-  console.log('OK: Connected. TargetMaster count =', items.length);
-  for (const it of items) console.log('-', it.code, it.nameJa, '/', it.nameEn);
+  const tItems = json?.data?.listTargetMasters?.items ?? [];
+  const mItems = json?.data?.listMethodMasters?.items ?? [];
+  const pItems = json?.data?.listPositionMasters?.items ?? [];
+  console.log('OK: Connected.');
+  console.log('  TargetMaster  count =', tItems.length);
+  console.log('  MethodMaster  count =', mItems.length);
+  console.log('  PositionMaster count =', pItems.length);
+  const show = (arr) => arr.slice(0, 12).map(it=> `${it.code}:${it.nameJa||it.nameEn||''}`).join(', ');
+  console.log('  Targets  ->', show(tItems));
+  console.log('  Methods  ->', show(mItems));
+  console.log('  Positions->', show(pItems));
 }
 
 main().catch((e) => {

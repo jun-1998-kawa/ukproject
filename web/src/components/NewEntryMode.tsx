@@ -78,7 +78,7 @@ function IpponCell(props: {
       </div>
       {open && (
         <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:4, background:'#fff', display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:4, maxHeight:140, width:260, overflowY:'auto', border:'1px solid #ddd', borderRadius:6, padding:6, boxShadow:'0 2px 8px rgba(0,0,0,0.15)' }}>
-          {methods.map(m=> {
+          {safeMethods.map(m=> {
             const checked = v.methods.includes(m.code)
             const allowed = methodAllowedForTarget2(m.code, v.target)
             return (
@@ -96,7 +96,7 @@ function IpponCell(props: {
       )}
       <SelectField labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
         <option value=""></option>
-        {targets.map(tgt=> (
+        {safeTargets.map(tgt=> (
           <option key={tgt.code} value={tgt.code}>{i18n.language.startsWith('ja') ? (tgt.nameJa ?? tgt.nameEn ?? tgt.code) : (tgt.nameEn ?? tgt.code)}</option>
         ))}
       </SelectField>
@@ -121,16 +121,6 @@ export default function NewEntryMode(props: {
 }){
   const { t } = useTranslation()
   const { matchId, setMatchId, matches, bouts, players, masters, apiUrl, getToken, onSaved } = props
-  // Fallback masters when API returns empty on prod
-  const fallbackTargets: Master[] = [
-    { code: 'MEN', nameJa: '面', nameEn: 'Men' },
-    { code: 'KOTE', nameJa: '小手', nameEn: 'Kote' },
-    { code: 'DO', nameJa: '胴', nameEn: 'Do' },
-    { code: 'TSUKI', nameJa: '突き', nameEn: 'Tsuki' },
-  ]
-  const safeTargets = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets
-  const safeMethods = masters.methods || []
-
   type RowState = { left1: PointInput | null; left2: PointInput | null; right1: PointInput | null; right2: PointInput | null; leftFouls: number; rightFouls: number }
   const [rows, setRows] = useState<Record<string, RowState>>({})
   const [boutsLocal, setBoutsLocal] = useState<Bout[]>(bouts)
@@ -148,6 +138,27 @@ export default function NewEntryMode(props: {
   const [isOfficial, setIsOfficial] = useState<boolean>(true)
   const [refError, setRefError] = useState<string|undefined>(undefined)
   const [dense, setDense] = useState<boolean>(true)
+  // Fallback masters when API returns empty in prod
+  const fallbackTargets2: Master[] = [
+    { code: 'MEN', nameJa: '面', nameEn: 'Men' },
+    { code: 'KOTE', nameJa: '小手', nameEn: 'Kote' },
+    { code: 'DO', nameJa: '胴', nameEn: 'Do' },
+    { code: 'TSUKI', nameJa: '突き', nameEn: 'Tsuki' },
+  ]
+  const fallbackMethods2: Master[] = [
+    { code:'SURIAGE', nameJa:'すり上げ', nameEn:'Suriage' },
+    { code:'KAESHI', nameJa:'返し', nameEn:'Kaeshi' },
+    { code:'NUKI', nameJa:'抜き', nameEn:'Nuki' },
+    { code:'DEBANA', nameJa:'出ばな', nameEn:'Debana' },
+    { code:'HIKI', nameJa:'引き', nameEn:'Hiki' },
+    { code:'HARAI', nameJa:'払い', nameEn:'Harai' },
+    { code:'TOBIKOMI', nameJa:'飛び込み', nameEn:'Tobikomi' },
+    { code:'GYAKU', nameJa:'逆', nameEn:'Gyaku' },
+    { code:'HIDARI', nameJa:'左', nameEn:'Left' },
+    { code:'AIKOTE', nameJa:'相小手', nameEn:'Aikote' },
+  ]
+  const safeTargets2 = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets
+  const safeMethods2 = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods
   const [focusBoutId, setFocusBoutId] = useState<string>('')
   const [allowEncho, setAllowEncho] = useState<boolean>(true)
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
@@ -533,6 +544,8 @@ export default function NewEntryMode(props: {
     </>
   )
 }
+
+
 
 
 
