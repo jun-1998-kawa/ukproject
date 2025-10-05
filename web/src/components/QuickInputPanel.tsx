@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { methodAllowedForTargetJaLabel } from '../lib/tech'
 import { useTranslation } from 'react-i18next'
 import { Button, Badge } from '@aws-amplify/ui-react'
@@ -30,14 +30,10 @@ export default function QuickInputPanel({ side, playerName, targets, methods, fo
     tryCommit({ ...pending, target: tcode })
   }
   function toggleMethod(m:string){
-    // apply simple constraints by target label
+    // apply constraints by target label (centralized in lib/tech)
     const tgt = pending.target
     const tgtLabel = targets.find(t=> t.code===tgt)?.label ?? ''
-    const allowed = !tgt ? true : (
-      m==='GYAKU' ? /胴/.test(tgtLabel) :
-      m==='HIDARI' ? /小手/.test(tgtLabel) :
-      m==='AIKOTE' ? /面/.test(tgtLabel) : true
-    )
+    const allowed = !tgt ? true : methodAllowedForTargetJaLabel(m, tgtLabel)
     if(!allowed) return
     const s = new Set(pending.methods)
     s.has(m) ? s.delete(m) : s.add(m)
@@ -70,7 +66,4 @@ export default function QuickInputPanel({ side, playerName, targets, methods, fo
     </div>
   )
 }
-
-
-
 

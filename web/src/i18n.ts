@@ -30,6 +30,16 @@ i18n
     },
   })
 
+// Prefer Japanese by default on first visit (no query/localStorage)
+try{
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search)
+    const hasQuery = params.has('lng')
+    const cached = localStorage.getItem('i18nextLng')
+    if(!hasQuery && !cached){ i18n.changeLanguage('ja') }
+  }
+}catch{}
+
 export default i18n
 
 

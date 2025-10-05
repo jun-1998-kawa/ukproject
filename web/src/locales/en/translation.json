@@ -36,5 +36,5 @@
   "resultEditor": {"set":"Set Result"},
   "export": {"players": "Export Players (CSV)", "vsTeams": "Export Vs Teams (CSV)", "tournaments": "Export Tournaments (CSV)", "print": "Print"},
   "dashboard": {"title":"Dashboard","selectPlayer":"Player","stats":"Stats","bouts":"Bouts","wins":"Wins","losses":"Losses","draws":"Draws","winRate":"Win rate","pointsFor":"Points for","pointsAgainst":"Points against","avgTimeToScore":"Avg time to score","topCombinedFor":"Top scoring techniques","topCombinedAgainst":"Top conceded techniques","pieFor":"Scoring technique distribution","pieAgainst":"Conceded technique distribution","vsOpponents":"Vs opponents","opponent":"Opponent","noData":"Select a player to view stats","from":"From","to":"To","tournament":"Tournament","tournamentPh":"Filter by name","topN":"Top N","clear":"Clear","fastest":"Fastest","slowest":"Slowest","pointsPerBout":"Points per bout","diff":"Point diff","teamTitle":"Team Dashboard","selectTeam":"Team","matchSummary":"Match Results","teamWins":"Team Wins","oppWins":"Opponent Wins","tournamentRanking":"Tournament Ranking","matches":"Matches","playerContribution":"Player Contribution","player":"Player"}
-  ,"dashboard.personal":"Personal","dashboard.team":"Team"
+  ,"dashboard.personal":"Personal","dashboard.team":"Team","dashboard.result":"Result"
 }

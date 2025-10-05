@@ -31,7 +31,7 @@ const deleteBoutMutation = `mutation DeleteBout($input: DeleteBoutInput!) { dele
 const deleteMatchMutation = `mutation DeleteMatch($input: DeleteMatchInput!) { deleteMatch(input:$input) { id } }`
 
 export default function App() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [matches, setMatches] = useState<Match[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -306,8 +306,8 @@ export default function App() {
           {tab==='dashboard' ? (
             <>
               <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-                <Button variation={dashMode==='personal'?'primary':'link'} onClick={()=> setDashMode('personal')}>{t('dashboard.personal')||'Personal'}</Button>
-                <Button variation={dashMode==='team'?'primary':'link'} onClick={()=> setDashMode('team')}>{t('dashboard.team')||'Team'}</Button>
+                <Button variation={dashMode==='personal'?'primary':'link'} onClick={()=> setDashMode('personal')}>{i18n.language?.startsWith('ja') ? '個人' : 'Personal'}</Button>
+                <Button variation={dashMode==='team'?'primary':'link'} onClick={()=> setDashMode('team')}>{i18n.language?.startsWith('ja') ? 'チーム' : 'Team'}</Button>
               </div>
               {dashMode==='personal' ? (
                 <Dashboard
@@ -321,7 +321,6 @@ export default function App() {
                 <TeamDashboard
                   matches={matches as any}
                   universities={universities}
-                  players={players}
                   labelJa={labelJa}
                   homeUniversityId={homeUniversityId}
                 />

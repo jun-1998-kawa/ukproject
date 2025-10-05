@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge } from '@aws-amplify/ui-react'
+import { methodAllowedForTargetJaLabel } from '../lib/tech'
 
 type Master = { code: string; nameJa?: string; nameEn?: string }
 type Bout = {
@@ -38,6 +39,17 @@ function IpponCell(props: {
   }
 
   function targetLabelJa(code:string){ const m = targets.find(t=> t.code===code); return (m?.nameJa ?? m?.nameEn ?? '') }
+  function methodAllowedForTarget2(mcode:string, tcode:string){
+    if(!tcode) return true
+    const tl = targetLabelJa(tcode)
+    // Prefer Japanese label; fall back to common target codes
+    if(tl) return methodAllowedForTargetJaLabel(mcode, tl)
+    const code = (tcode||'').toUpperCase()
+    if(mcode==='GYAKU') return code.includes('DO')
+    if(mcode==='HIDARI') return code.includes('KOTE')
+    if(mcode==='AIKOTE') return code.includes('MEN')
+    return true
+  }
   function methodAllowedForTarget(mcode:string, tcode:string){
     if(!tcode) return true
     const tl = targetLabelJa(tcode)
@@ -68,7 +80,7 @@ function IpponCell(props: {
         <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:4, background:'#fff', display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:4, maxHeight:140, width:260, overflowY:'auto', border:'1px solid #ddd', borderRadius:6, padding:6, boxShadow:'0 2px 8px rgba(0,0,0,0.15)' }}>
           {methods.map(m=> {
             const checked = v.methods.includes(m.code)
-            const allowed = methodAllowedForTarget(m.code, v.target)
+            const allowed = methodAllowedForTarget2(m.code, v.target)
             return (
               <label key={m.code} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, opacity: allowed?1:0.4 }}>
                 <input type="checkbox" disabled={!allowed} checked={checked && allowed} onChange={(e)=>{
@@ -82,7 +94,7 @@ function IpponCell(props: {
           })}
         </div>
       )}
-      <SelectField labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
+      <SelectField labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
         <option value=""></option>
         {targets.map(tgt=> (
           <option key={tgt.code} value={tgt.code}>{i18n.language.startsWith('ja') ? (tgt.nameJa ?? tgt.nameEn ?? tgt.code) : (tgt.nameEn ?? tgt.code)}</option>

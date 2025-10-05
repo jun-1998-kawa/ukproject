@@ -12,7 +12,7 @@ export default function TeamDashboard(props:{
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
 }){
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { matches, universities, labelJa, homeUniversityId } = props
   const [teamId, setTeamId] = useState<string>('')
   const [from, setFrom] = useState<string>('')
@@ -269,7 +269,7 @@ export default function TeamDashboard(props:{
                   <TableCell as="th">{t('dashboard.teamWins')||'Team Wins'}</TableCell>
                   <TableCell as="th">{t('dashboard.oppWins')||'Opp Wins'}</TableCell>
                   <TableCell as="th">{t('dashboard.draws')||'Draws'}</TableCell>
-                  <TableCell as="th">{t('dashboard.result')||'Result'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '結果' : 'Result'}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
