@@ -6,9 +6,10 @@ import AWS from 'aws-sdk';
 async function main() {
   const outputsRaw = await readFile('amplify_outputs.json', 'utf-8');
   const outputs = JSON.parse(outputsRaw);
-  const url = outputs?.data?.url;
-  const region = outputs?.data?.aws_region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  const url = process.env.SEED_API_URL || outputs?.data?.url;
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || outputs?.data?.aws_region;
   if (!url) throw new Error('data.url missing in amplify_outputs.json');
+  console.log('[verify] Target URL:', url);
 
   const query = `query {
     listTargetMasters { items { code nameJa nameEn active order } }

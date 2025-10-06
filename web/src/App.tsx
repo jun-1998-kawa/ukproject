@@ -16,11 +16,11 @@ import outputs from '../../amplify_outputs.json'
 
 Amplify.configure(outputs)
 
-type Match = { id: string; heldOn: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
+type Match = { id: string; heldOn: string; createdAt?: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
 type Point = { id?: string; tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
 
-const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement } } } } } nextToken } }`
+const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement } } } } } nextToken } }`
 const listUniversitiesHome = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id isHome } nextToken } }`
 const listUniversitiesNames = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName isHome } nextToken } }`
 const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } }`
@@ -156,6 +156,16 @@ export default function App() {
         acc.push(...json.data.listMatches.items)
         nextToken = json.data.listMatches.nextToken
       } while(nextToken)
+      // Deterministic order: latest first by heldOn, then createdAt, then id
+      acc.sort((a:any,b:any)=>{
+        const ah = new Date(a.heldOn).getTime() || 0
+        const bh = new Date(b.heldOn).getTime() || 0
+        if(bh!==ah) return bh-ah
+        const ac = new Date(a.createdAt ?? 0).getTime() || 0
+        const bc = new Date(b.createdAt ?? 0).getTime() || 0
+        if(bc!==ac) return bc-ac
+        return String(b.id).localeCompare(String(a.id))
+      })
       setMatches(acc)
     } catch (e: any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
   }
