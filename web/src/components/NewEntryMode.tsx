@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge } from '@aws-amplify/ui-react'
+import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge, Heading } from '@aws-amplify/ui-react'
 import { methodAllowedForTargetJaLabel } from '../lib/tech'
 
 type Master = { code: string; nameJa?: string; nameEn?: string }
@@ -11,6 +11,8 @@ type Bout = {
   ourPosition?: string;
   ourStance?: string;
   opponentStance?: string;
+  winType?: string | null;
+  winnerPlayerId?: string | null;
   points?: { items: { id: string; tSec: number; target?: string|null; methods?: string[]|null; scorerPlayerId?: string|null; judgement?: string|null }[] }
 }
 type PointInput = { tSec: number | ''; target: string; methods: string[] }
@@ -94,14 +96,14 @@ function IpponCell(props: {
           })}
         </div>
       )}
-      <SelectField labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
+      <SelectField label={t('labels.target')||'Target'} labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
         <option value=""></option>
         {targets.map(tgt=> (
           <option key={tgt.code} value={tgt.code}>{i18n.language.startsWith('ja') ? (tgt.nameJa ?? tgt.nameEn ?? tgt.code) : (tgt.nameEn ?? tgt.code)}</option>
         ))}
       </SelectField>
       <div style={{ gridColumn:'1 / 2', display:'flex', alignItems:'center', gap:4 }}>
-        <TextField labelHidden placeholder={t('ipponCell.secondsPlaceholder')} value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="40px" style={{ padding:'2px 4px' }} />
+        <TextField label={t('labels.seconds')||'Seconds'} labelHidden placeholder={t('ipponCell.secondsPlaceholder')} value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="40px" style={{ padding:'2px 4px' }} />
         <span style={{ fontSize:10, color:'#666' }}>s</span>
       </div>
     </div>
@@ -164,6 +166,9 @@ export default function NewEntryMode(props: {
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
   const [savingId, setSavingId] = useState<string>('')
+  // YouTube playlist settings for current tournament
+  const [ytOpen, setYtOpen] = useState(false)
+  const [ytUrl, setYtUrl] = useState<string>('')
 
   useEffect(()=>{
     const init: Record<string, RowState> = {}
@@ -173,6 +178,55 @@ export default function NewEntryMode(props: {
     if(m){ setTournament(m.tournament ?? ''); setHeldOn(m.heldOn ?? ''); setIsOfficial((m as any).isOfficial ?? true); setOurUniversityId((m as any).ourUniversityId ?? ''); setOpponentUniversityId((m as any).opponentUniversityId ?? '') }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bouts.map(b=> b.id).join(','), matchId])
+  // Load initial YouTube URL for selected tournament from localStorage (best-effort)
+  useEffect(()=>{
+    try{
+      const raw = localStorage.getItem('yt.playlists');
+      if(raw){
+        const map = JSON.parse(raw) as Record<string,string>;
+        setYtUrl(map[tournament] || '')
+      } else { setYtUrl('') }
+    }catch{ setYtUrl('') }
+  }, [tournament])
+
+  function canonicalPlaylistUrl(input: string): string | '' {
+    const s = (input||'').trim()
+    if(!s) return ''
+    try{
+      if(/^https?:\/\//i.test(s)){
+        const u = new URL(s)
+        const id = u.searchParams.get('list') || ''
+        return id ? "https://www.youtube.com/playlist?list=" + id : s
+      }
+      // treat as playlist id
+      return "https://www.youtube.com/playlist?list=" + s
+    }catch{ return '' }
+  }
+
+  async function saveYtForTournament(){
+    try{ // persist locally
+      const key = tournament?.trim(); if(!key){ setYtOpen(false); return }
+      const url = canonicalPlaylistUrl(ytUrl)
+      let map: Record<string,string> = {}
+      try{ const raw = localStorage.getItem('yt.playlists'); if(raw) map = JSON.parse(raw) }catch{}
+      if(url) map[key] = url; else delete map[key]
+      try{ localStorage.setItem('yt.playlists', JSON.stringify(map)) }catch{}
+      // send to API (inline input; no variables)
+      if(apiUrl && getToken){
+        try{
+          const token = await getToken();
+          if(token){
+            const updateMut = "mutation UpdateTournamentMaster { updateTournamentMaster(input:{ name: \"" + key.replace(/\"/g,'\\\"') + "\", youtubePlaylist: " + (url?("\"" + url.replace(/\"/g,'\\\"') + "\""):"null") + " }){ name } }"
+            const createMut = "mutation CreateTournamentMaster { createTournamentMaster(input:{ name: \"" + key.replace(/\"/g,'\\\"') + "\", youtubePlaylist: " + (url?("\"" + url.replace(/\"/g,'\\\"') + "\""):"null") + " }){ name } }"
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateMut }) }) }catch{}
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createMut }) }) }catch{}
+          }
+        }catch{}
+      }
+    }finally{
+      setYtOpen(false)
+    }
+  }
 
   async function loadRefData(){
     setRefError(undefined)
@@ -355,12 +409,13 @@ export default function NewEntryMode(props: {
   return (
     <>
     <View>
-      <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'flex-end'}}>
+      <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end'}}>
         <SelectField label={t('labels.match')} value={matchId} onChange={e=> setMatchId(e.target.value)} size="small">
           <option value="">{t('placeholders.select')}</option>
           {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
         </SelectField>
         <TextField label={t('labels.tournament')} value={tournament} onChange={e=> setTournament(e.target.value)} width={dense?"12rem":"16rem"} />
+        <Button size="small" onClick={()=> setYtOpen(true)} isDisabled={!tournament?.trim()}>{t('youtube.edit')||'YouTube再生リスト設定'}</Button>
         <TextField label={t('labels.date')} type="date" value={heldOn} onChange={e=> setHeldOn(e.target.value)} width={dense?"10rem":"12rem"} />
         <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
           <input type="checkbox" checked={isOfficial} onChange={e=> setIsOfficial(e.target.checked)} disabled={!!matchId} /> {isOfficial ? t('labels.official') : t('labels.practice')}
@@ -379,7 +434,7 @@ export default function NewEntryMode(props: {
         )}
         <Button size="small" variation="link" onClick={()=> setDense(d=> !d)}>{dense? t('actions.switchStandard'):t('actions.switchDense')}</Button>
       </View>
-      <View marginBottom="0.25rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'center'}}>
+      <View marginBottom="0.25rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
         <TextField label={t('labels.searchPlayer')} placeholder={t('placeholders.nameFilter')} value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
         <Button size="small" onClick={loadRefData}>{t('actions.reloadRefs')}</Button>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -482,7 +537,7 @@ export default function NewEntryMode(props: {
                   {rowValid && autoResult && (<div style={{ color:'#666', fontSize:11, marginBottom:4 }}>{t('hints.saveAutoJudgement')}</div>)}
                   <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                   <Button size="small" onClick={()=> saveRow(b)} isDisabled={!rowValid || savingId===b.id} isLoading={savingId===b.id}>{t('actions.save')}</Button>
-                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, bout: b })}>{t('actions.delete')}</Button>
+                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'bout', targetId: b.id, bout: b })}>{t('actions.delete')}</Button>
                     {!autoResult && (
                       <>
                         <select value={(resultEdit[b.id]?.winType)|| (b.winType ?? '')} onChange={(e)=> setResultEdit(x=> ({...x, [b.id]: { winType: e.target.value, winner: (resultEdit[b.id]?.winner ?? (b.winnerPlayerId? (b.winnerPlayerId===b.ourPlayerId?'our':'opponent') : '') ) as any }}))} style={{ fontSize:12 }}>
@@ -512,6 +567,24 @@ export default function NewEntryMode(props: {
         </TableBody>
       </Table>
     </View>
+    {ytOpen && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setYtOpen(false)}>
+        <div style={{ background:'#fff', minWidth:360, maxWidth:720, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <Heading level={5}>{t('youtube.title')||'大会ごとのYouTube再生リスト'}</Heading>
+          <div style={{ fontSize:12, color:'#555', marginTop:4 }}>{t('youtube.help')||'URLまたはプレイリストID（list=...）を入力してください。空にすると未設定になります。'}</div>
+          <div style={{ display:'grid', gap:8, marginTop:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'center' }}>
+              <div style={{ fontSize:13 }}>{tournament || '-'}</div>
+              <input value={ytUrl} onChange={e=> setYtUrl(e.target.value)} placeholder="https://www.youtube.com/playlist?list=..." style={{ width:'100%', padding:'6px 8px', fontSize:13 }} />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+            <Button variation="link" onClick={()=> setYtOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
+            <Button variation="primary" onClick={saveYtForTournament}>{t('actions.save')||'保存'}</Button>
+          </div>
+        </div>
+      </div>
+    )}
     {delModal?.open && (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setDelModal(null)}>
         <div style={{ background:'#fff', minWidth:320, maxWidth:520, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
@@ -544,6 +617,7 @@ export default function NewEntryMode(props: {
     </>
   )
 }
+
 
 
 

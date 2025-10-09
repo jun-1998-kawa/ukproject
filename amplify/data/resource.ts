@@ -267,6 +267,19 @@ const schema = a.schema({
     allow.groups(["ADMINS","COACHES"]).to(["create","delete","read"]),
     allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
   ]),
+
+  // Tournament master (canonical tournament names + YouTube playlist)
+  TournamentMaster: a.model({
+    name: a.string().required(),
+    shortName: a.string(),
+    youtubePlaylist: a.string(),
+    active: a.boolean().default(true),
+  })
+  .identifier(["name"]) // unique by name
+  .authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
+    allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
+  ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

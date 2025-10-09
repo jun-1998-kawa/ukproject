@@ -178,6 +178,9 @@ export default function App() {
       const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: listMastersQuery }) })
       const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
       const tItems = json.data.listTargetMasters.items
+      const tpItems = (json.data.listTournamentMasters?.items ?? []) as any[];
+      const tpMap: Record<string,string> = {}; for(const tp of tpItems){ if(tp.youtubePlaylist && tp.name) tpMap[tp.name] = tp.youtubePlaylist }
+      (window as any).__tournamentPlaylists = tpMap
       let mItems = json.data.listMethodMasters.items
       // Append client-side extra method modifiers if missing
       const extraMethods = [
@@ -339,14 +342,7 @@ export default function App() {
                   homeUniversityId={homeUniversityId}
                 />
               ) : (
-                <TeamDashboard
-                  matches={matches as any}
-                  universities={universities}
-                  apiUrl={apiUrl}
-                  getToken={getToken}
-                  tournamentPlaylists={tournamentPlaylists}
-                  players={players}
-                  labelJa={labelJa}
+                <TeamDashboard\r\n                  matches={matches as any}\n                  universities={universities}\n                  apiUrl={apiUrl}\n                  getToken={getToken}\n                  tournamentPlaylists={tournamentPlaylists}\n                  players={players}\n                  labelJa={labelJa}
                   homeUniversityId={homeUniversityId}
                 />
               )}
@@ -358,9 +354,6 @@ export default function App() {
     </Authenticator>
   )
 }
-
-
-
 
 
 

@@ -40,9 +40,21 @@ hr { border: 0; border-top: 1px solid var(--border); }
 .nav-item.active { background: color-mix(in oklab, var(--color-primary) 20%, transparent); color: white; }
 
 /* Cards */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-2); padding: var(--space-5); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-2); padding: var(--space-5); overflow: hidden; }
+
+/* Prevent content from overflowing cards/containers */
+.min-w-0 { min-width: 0; }
+.no-overflow { overflow: hidden; }
+
+/* Make tables resilient to long content */
+.table-wrap { width: 100%; overflow-x: auto; }
+.table-wrap table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.table-wrap th, .table-wrap td { word-break: break-word; overflow-wrap: anywhere; }
+
+/* Responsive SVG/graphs inside cards */
+.graph { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.graph svg { max-width: 100%; height: auto; display: block; }
 
 /* Utility */
 .row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
 .muted { color: var(--text-muted); }
-

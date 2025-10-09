@@ -202,7 +202,6 @@ export default function Dashboard(props:{
             <div>{t('dashboard.avgTimeToScore')}: <b>{stat.avgTime==null?'-':stat.avgTime.toFixed(1)+'s'}</b></div>
             <div>{t('dashboard.fastest')}: <b>{stat.fastest==null?'-':stat.fastest+'s'}</b> / {t('dashboard.slowest')}: <b>{stat.slowest==null?'-':stat.slowest+'s'}</b></div>
             <div>{t('dashboard.pointsPerBout')}: <b>{stat.ppg.toFixed(2)}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
-            <div>{t('dashboard.vsHentou')||'対変刀'}: <b>{(((stat as any).vsHentou?.winRate||0)*100).toFixed(1)}%</b> <span className="muted">({(stat as any).vsHentou?.wins||0}-{(stat as any).vsHentou?.losses||0}-{(stat as any).vsHentou?.draws||0} / {(stat as any).vsHentou?.bouts||0})</span></div>
           </View>
 
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
@@ -223,13 +222,15 @@ export default function Dashboard(props:{
 
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
           </View>
+            <Heading level={6}>{t('dashboard.timeInBout')||'経過秒分布'}</Heading>
+            <Heading level={6}>{t('dashboard.timeInBout')||'経過秒分布'}</Heading>
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
-            <Heading level={6}>{t('dashboard.vsStance') || '対変刀勝率'}</Heading>
+            <Heading level={6}>{t('dashboard.vsStance') || '対スタイル勝率'}</Heading>
             <View className="table-wrap">
               <Table variation="bordered" highlightOnHover>
                 <TableHead>
                   <TableRow>
-                    <TableCell as="th">{t('stance.stance')||'構え'}</TableCell>
+                    <TableCell as="th">{t('stance.stance')||'スタイル'}</TableCell>
                     <TableCell as="th">{t('dashboard.bouts')}</TableCell>
                     <TableCell as="th">{t('dashboard.wins')}</TableCell>
                     <TableCell as="th">{t('dashboard.losses')}</TableCell>
@@ -263,10 +264,6 @@ export default function Dashboard(props:{
             </View>
           </View>
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
-            <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden', marginBottom:12}}>
-              <Heading level={6}>{t('dashboard.timeInBout') || '経過秒分布'}</Heading>
-              <TimeInBoutHistogram binsFor={(stat as any).tForBins} binsAgainst={(stat as any).tAgainstBins} binSizeSec={BIN_SIZE_SEC} />
-            </View>
             <Heading level={6}>{t('dashboard.vsOpponents')}</Heading>
             <View className="table-wrap">
             <Table variation="bordered" highlightOnHover>

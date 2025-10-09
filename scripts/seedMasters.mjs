@@ -73,10 +73,11 @@ async function seed(kind, items, url, token, region) {
 async function main() {
   const token = process.env.SEED_AUTH_TOKEN;
   const outputs = JSON.parse(await readFile('amplify_outputs.json', 'utf-8'));
-  const url = outputs?.data?.url;
-  const region = outputs?.data?.aws_region || process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  const url = process.env.SEED_API_URL || outputs?.data?.url;
+  const region = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || outputs?.data?.aws_region;
   if (!url) throw new Error('data.url missing in amplify_outputs.json');
   if (!token && !region) throw new Error('Provide SEED_AUTH_TOKEN or configure AWS_REGION for IAM signing');
+  console.log('[seed] Target URL:', url);
 
   const targets = await loadJSON('seed/targets.json');
   const methods = await loadJSON('seed/methods.json');

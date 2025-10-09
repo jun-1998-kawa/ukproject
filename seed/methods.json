@@ -82,5 +82,12 @@
     "nameEn": "Aikote",
     "order": 12,
     "active": true
+  },
+  {
+    "code": "ATOUCHI",
+    "nameJa": "後打ち",
+    "nameEn": "Ato-uchi",
+    "order": 13,
+    "active": true
   }
 ]
