@@ -1,0 +1,560 @@
+   1 import { useEffect, useMemo, useState } from 'react'
+   2 import { useTranslation } from 'react-i18next'
+   3 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+   4 
+   5 // Shared color palette for charts/legend
+   6 const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
+   7 
+   8 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
+   9 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+  10 type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null; recordedAt?: string | null }
+  11 
+  12 type Master = { code: string; nameJa?: string; nameEn?: string }
+  13 
+  14 export default function Dashboard(props:{
+  15   matches: Match[]
+  16   players: Record<string,string>
+  17   masters: { targets: Master[]; methods: Master[] }
+  18   labelJa: { target: Record<string,string>, method: Record<string,string> }
+  19   homeUniversityId?: string
+  20   apiUrl?: string
+  21   getToken?: ()=> Promise<string|null>
+  22 }){
+  23   const { t } = useTranslation()
+  24   const { matches, players, labelJa, homeUniversityId } = props
+  25   const [playerId, setPlayerId] = useState<string>('')
+  26   const [from, setFrom] = useState<string>('')
+  27   const [to, setTo] = useState<string>('')
+  28   const [tournamentFilter, setTournamentFilter] = useState<string>('')
+  29   const [granularity, setGranularity] = useState<'target'|'technique'>('technique')
+  30   const TOP_N = 5
+  31   const BIN_SIZE_SEC = 15
+  32   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  33   const [notes, setNotes] = useState<{ matchId:string, comment:string }[]>([])
+  34   const [noteModal, setNoteModal] = useState<{ open:boolean; matchId:string; text:string }>( { open:false, matchId:'', text:'' } )
+  35   const [overallNote, setOverallNote] = useState<string>('')
+  36   const [overallSaving, setOverallSaving] = useState<boolean>(false)
+  37 
+  38   const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
+  39 
+  40   // Persist filter in localStorage (share same key with App to keep consistent)
+  41   useEffect(()=>{
+  42     try{
+  43       const saved = localStorage.getItem('filters:type')
+  44       if(saved==="official"||saved==="practice"||saved==="all"||saved==="intra"){ setOfficialFilter(saved as any) }
+  45     }catch{}
+  46   },[])
+  47   useEffect(()=>{ try{ localStorage.setItem('filters:type', officialFilter) }catch{} }, [officialFilter])
+  48   // Fetch qualitative notes for selected player
+  49   useEffect(()=>{
+  50     (async()=>{
+  51       setNotes([])
+  52       if(!props.apiUrl || !props.getToken || !playerId) return
+  53       try{
+  54         const token = await props.getToken(); if(!token) return
+  55         const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+  56         const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+  57         const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+  58         setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+  59       }catch{}
+  60     })()
+  61   }, [playerId, props.apiUrl, props.getToken])
+  62 
+  63   const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
+  64   const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
+  65   const getPlayerQuery = `query GetPlayer($id:ID!){ getPlayer(id:$id){ id notes } }`
+  66   const updatePlayerMut = `mutation UpdatePlayer($input: UpdatePlayerInput!){ updatePlayer(input:$input){ id } }`
+  67 
+  68   function playerMatches(){
+  69     if(!playerId) return [] as Match[]
+  70     const arr: Match[] = []
+  71     for(const m of matches){
+  72       const has = (m.bouts?.items ?? []).some(b=> b.ourPlayerId===playerId || b.opponentPlayerId===playerId)
+  73       if(has) arr.push(m)
+  74     }
+  75     return arr
+  76   }
+  77   function openAddNote(){
+  78     const pm = playerMatches()
+  79     const firstId = pm[0]?.id || ''
+  80     setNoteModal({ open:true, matchId:firstId, text:'' })
+  81   }
+  82   function openEditNote(mId:string, text:string){ setNoteModal({ open:true, matchId:mId, text }) }
+  83   async function saveNote(){
+  84     if(!props.apiUrl || !props.getToken || !playerId || !noteModal.matchId) { setNoteModal({ open:false, matchId:'', text:'' }); return }
+  85     try{
+  86       const token = await props.getToken(); if(!token) return
+  87       const input:any = { playerId, matchId: noteModal.matchId, comment: (noteModal.text||'').trim() }
+  88       if(!input.comment){ setNoteModal({ open:false, matchId:'', text:'' }); return }
+  89       try{ await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
+  90       try{ await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+  91       // refresh list
+  92       const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+  93       const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+  94       const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+  95       setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+  96     }catch{}
+  97     setNoteModal({ open:false, matchId:'', text:'' })
+  98   }
+  99 
+ 100   // Load/save overall player analysis (Player.notes)
+ 101   useEffect(()=>{
+ 102     (async()=>{
+ 103       setOverallNote('')
+ 104       if(!props.apiUrl || !props.getToken || !playerId) return
+ 105       try{
+ 106         const token = await props.getToken(); if(!token) return
+ 107         const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: getPlayerQuery, variables: { id: playerId } }) })
+ 108         const j:any = await res.json(); const p = j?.data?.getPlayer
+ 109         setOverallNote(p?.notes || '')
+ 110       }catch{}
+ 111     })()
+ 112   }, [playerId, props.apiUrl, props.getToken])
+ 113 
+ 114   async function saveOverall(){
+ 115     if(!props.apiUrl || !props.getToken || !playerId) return
+ 116     setOverallSaving(true)
+ 117     try{
+ 118       const token = await props.getToken(); if(!token) return
+ 119       const input:any = { id: playerId, notes: (overallNote||'').trim() }
+ 120       await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updatePlayerMut, variables: { input } }) })
+ 121     }catch{}
+ 122     finally{ setOverallSaving(false) }
+ 123   }
+ 124   // Fetch qualitative notes for selected player
+ 125   useEffect(()=>{
+ 126     (async()=>{
+ 127       setNotes([])
+ 128       if(!props.apiUrl || !props.getToken || !playerId) return
+ 129       try{
+ 130         const token = await props.getToken(); if(!token) return
+ 131         const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+ 132         const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+ 133         const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+ 134         setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+ 135       }catch{}
+ 136     })()
+ 137   }, [playerId, props.apiUrl, props.getToken])
+ 138 
+ 139   const stat = useMemo(()=>{
+ 140     if(!playerId) return null
+ 141     const filtered = matches.filter(m=>{
+ 142       if(from && m.heldOn < from) return false
+ 143       if(to && m.heldOn > to) return false
+ 144       if(officialFilter==='official' && (m as any).isOfficial === false) return false
+ 145       if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+ 146       if(officialFilter==='intra' && (!homeUniversityId || (m as any).ourUniversityId!==homeUniversityId || (m as any).opponentUniversityId!==homeUniversityId)) return false
+ 147       if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+ 148       if(tournamentFilter && !(m as any).tournament) return false
+ 149       return true
+ 150     })
+ 151     const combinedFor: Record<string, number> = {}
+ 152     const combinedAgainst: Record<string, number> = {}
+ 153     const targetOnlyFor: Record<string, number> = {}
+ 154     const targetOnlyAgainst: Record<string, number> = {}
+ 155     const vs: Record<string, { bouts:number; wins:number; losses:number; draws:number; pf:number; pa:number }> = {}
+ 156     let wins=0, losses=0, draws=0, bouts=0, pf=0, pa=0
+ 157     const times:number[]=[]
+ 158     const hoursFor = new Array(24).fill(0)
+ 159     const hoursAgainst = new Array(24).fill(0)
+ 160     // time-in-bout bins by seconds
+ 161     const tForBins: number[] = []
+ 162     const tAgainstBins: number[] = []
+ 163     const incBin = (arr:number[], t:number)=>{ const idx = Math.floor(Math.max(0,t)/Math.max(1,BIN_SIZE_SEC)); arr[idx] = (arr[idx]||0)+1 }
+ 164     const stanceKey = (s?:string|null)=> s==='JODAN' ? 'JODAN' : ((s||'').startsWith('NITOU') ? 'NITOU' : '')
+ 165     const vsStance: Record<string, { bouts:number; wins:number; losses:number; draws:number }> = { JODAN:{bouts:0,wins:0,losses:0,draws:0}, NITOU:{bouts:0,wins:0,losses:0,draws:0} }
+ 166 
+ 167     for(const m of filtered){
+ 168       for(const b of (m.bouts?.items ?? [])){
+ 169         const isLeft = b.ourPlayerId===playerId
+ 170         const isRight = b.opponentPlayerId===playerId
+ 171         if(!isLeft && !isRight) continue
+ 172         bouts++
+ 173         const oppId = isLeft ? b.opponentPlayerId : b.ourPlayerId
+ 174         const opp = (vs[oppId] ||= { bouts:0, wins:0, losses:0, draws:0, pf:0, pa:0 });
+ 175         opp.bouts++
+ 176         if(b.winType==='DRAW'){ draws++; opp.draws++; const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++; vsStance[sk].draws++ } }
+ 177         else if(b.winnerPlayerId){
+ 178           const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++ }
+ 179           if(b.winnerPlayerId===playerId){ wins++; opp.wins++; if(sk) vsStance[sk].wins++ } else { losses++; opp.losses++; if(sk) vsStance[sk].losses++ }
+ 180         }
+ 181         for(const p of (b.points?.items ?? [])){
+ 182           if(p.scorerPlayerId===playerId){
+ 183             pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
+ 184             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
+ 185             const key = buildTechniqueKey(p.target||'', p.methods||[])
+ 186               combinedAgainst[key] = (combinedAgainst[key]||0)+1
+ 187             combinedFor[key] = (combinedFor[key]||0)+1
+ 188             if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
+ 189             if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
+ 190             if(typeof p.tSec==='number') incBin(tForBins, p.tSec)
+ 191           } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
+ 192             pa++; opp.pa++
+ 193             if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
+ 194             else {
+ 195               const key = buildTechniqueKey(p.target||'', p.methods||[])
+ 196               combinedAgainst[key] = (combinedAgainst[key]||0)+1
+ 197               if(p.target) targetOnlyAgainst[p.target] = (targetOnlyAgainst[p.target]||0)+1
+ 198             }
+ 199             if(p.recordedAt){ const hh = new Date(p.recordedAt).getHours(); if(!Number.isNaN(hh)) hoursAgainst[hh]++ }
+ 200             if(typeof p.tSec==='number') incBin(tAgainstBins, p.tSec)
+ 201           }
+ 202         }
+ 203       }
+ 204     }
+ 205     const avgTime = times.length ? (times.reduce((a,b)=>a+b,0)/times.length) : null
+ 206     const winRate = bouts ? wins/bouts : 0
+ 207     const vsTop = Object.entries(vs).sort((a,b)=> b[1].bouts - a[1].bouts).slice(0,8)
+ 208     const fastest = times.length ? Math.min(...times) : null
+ 209     const slowest = times.length ? Math.max(...times) : null
+ 210     const ppg = bouts ? pf / bouts : 0
+ 211     const diff = pf - pa
+ 212     const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 213     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 214     const topTargetFor = Object.entries(targetOnlyFor).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 215     const topTargetAgainst = Object.entries(targetOnlyAgainst).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 216     const vsHentou = (()=>{ const j=vsStance.JODAN, n=vsStance.NITOU; const b=j.bouts+n.bouts, w=j.wins+n.wins, l=j.losses+n.losses, d=j.draws+n.draws; return { bouts:b, wins:w, losses:l, draws:d, winRate: b? (w/b): 0 } })()
+ 217     return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst, topTargetFor, topTargetAgainst, vsTop, hoursFor, hoursAgainst, tForBins, tAgainstBins, vsStance, vsHentou }
+ 218   }, [matches, playerId, from, to, tournamentFilter, officialFilter, homeUniversityId])
+ 219 
+ 220   function labelTarget(code:string){ return labelJa.target[code] ?? code }
+ 221   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
+ 222   function buildTechniqueKey(target?: string|null, methods?: string[]|null){
+ 223     const mm = methods ?? []
+ 224     return `${target||''}:${mm.join('+')}`
+ 225   }
+ 226   function labelTechnique(targetCode?: string|null, methods?: string[]|null){
+ 227     if(!targetCode) return '-'
+ 228     const tlabel = labelJa.target[targetCode] ?? targetCode
+ 229     const mm = methods ?? []
+ 230     if(mm.length===0) return tlabel
+ 231     return mm.map(m=> `${labelJa.method[m] ?? m}${tlabel}`).join(' / ')
+ 232   }
+ 233 
+ 234   function PieChart({items, size=140}:{ items: [string, number][], size?:number }){
+ 235     const total = items.reduce((s, [,v])=> s+v, 0)
+ 236     if(total<=0) return <div>-</div>
+ 237     const r = size/2, cx=r, cy=r
+ 238     const nonZeroIdx = items.findIndex(([,v])=> v>0)
+ 239     if(items.filter(([,v])=> v>0).length===1 && nonZeroIdx>=0){
+ 240       const color = PALETTE[nonZeroIdx % PALETTE.length]
+ 241       return (
+ 242         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+ 243           <circle cx={cx} cy={cy} r={r} fill={color} />
+ 244         </svg>
+ 245       )
+ 246     }
+ 247     let acc = 0
+ 248     const paths = items.map(([,v],i)=>{
+ 249       const a0 = (acc/total)*2*Math.PI; acc += v; const a1 = (acc/total)*2*Math.PI
+ 250       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
+ 251       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
+ 252       const large = (a1-a0) > Math.PI ? 1 : 0
+ 253       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
+ 254       return (<path key={i} d={d} fill={PALETTE[i%PALETTE.length]} stroke="#fff" strokeWidth={1} />)
+ 255     })
+ 256     return (<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>)
+ 257   }
+ 258 
+ 259   return (
+ 260     <View className="min-w-0">
+ 261       <Heading level={4}>{t('dashboard.title')}</Heading>
+ 262       <View marginTop="0.5rem">
+ 263         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
+ 264           <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="18rem">
+ 265             <option value="">--</option>
+ 266             {playerList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
+ 267           </SelectField>
+ 268           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
+ 269           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
+ 270           <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">
+ 271             <option value="all">{t('filters.all')}</option>
+ 272             <option value="official">{t('filters.official')}</option>
+ 273             <option value="practice">{t('filters.practice')}</option>
+ 274             <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
+ 275           </SelectField>
+ 276           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
+ 277           <SelectField label={t('dashboard.granularity')||'Granularity'} value={granularity} onChange={e=> setGranularity(e.target.value as any)} size="small" width="12rem">
+ 278             <option value="technique">{t('dashboard.gran.technique')||'Technique x Target'}</option>
+ 279             <option value="target">{t('dashboard.gran.target')||'Target only'}</option>
+ 280           </SelectField>
+ 281           <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setOfficialFilter('all') }}>{t('dashboard.clear')}</Button>
+ 282         </Flex>
+ 283       </View>
+ 284 
+ 285       {!playerId && (
+ 286         <View marginTop="0.75rem" color="#666">{t('dashboard.noData')}</View>
+ 287       )}
+ 288 
+ 289       {playerId && stat && (
+ 290         <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:12, minWidth:0}}>
+ 291           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 292             <Heading level={6}>{t('dashboard.stats')}</Heading>
+ 293             <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : (officialFilter==='practice' ? t('filters.practice') : (t('filters.intra')||'Intra-squad'))}</b></div>
+ 294             <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>
+ 295             <div>{t('dashboard.wins')}: <b>{stat.wins}</b> / {t('dashboard.losses')}: <b>{stat.losses}</b> / {t('dashboard.draws')}: <b>{stat.draws}</b></div>
+ 296             <div>{t('dashboard.winRate')}: <b>{(stat.winRate*100).toFixed(1)}%</b></div>
+ 297             <div>{t('dashboard.pointsFor')}: <b>{stat.pf}</b> / {t('dashboard.pointsAgainst')}: <b>{stat.pa}</b></div>
+ 298             <div>{t('dashboard.avgTimeToScore')}: <b>{stat.avgTime==null?'-':stat.avgTime.toFixed(1)+'s'}</b></div>
+ 299             <div>{t('dashboard.fastest')}: <b>{stat.fastest==null?'-':stat.fastest+'s'}</b> / {t('dashboard.slowest')}: <b>{stat.slowest==null?'-':stat.slowest+'s'}</b></div>
+ 300             <div>{t('dashboard.pointsPerBout')}: <b>{stat.ppg.toFixed(2)}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
+ 301             <div>{t('dashboard.vsHentou')||'対変刀'}: <b>{(((stat as any).vsHentou?.winRate||0)*100).toFixed(1)}%</b> <span className="muted">({(stat as any).vsHentou?.wins||0}-{(stat as any).vsHentou?.losses||0}-{(stat as any).vsHentou?.draws||0} / {(stat as any).vsHentou?.bouts||0})</span></div>
+ 302           </View>
+ 303 
+ 304           <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 305             <Heading level={6}>{t('dashboard.pieFor')}</Heading>
+ 306             <div className="graph">
+ 307               <PieChart items={(granularity==='technique' ? stat.topCombinedFor : (stat as any).topTargetFor) as any} />
+ 308             </div>
+ 309             <Legend items={(granularity==='technique' ? stat.topCombinedFor : (stat as any).topTargetFor) as any} labelJa={labelJa} />
+ 310 
+ 311           </View>
+ 312           <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 313             <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
+ 314             <div className="graph">
+ 315               <PieChart items={(granularity==='technique' ? stat.topCombinedAgainst : (stat as any).topTargetAgainst) as any} />
+ 316             </div>
+ 317             <Legend items={(granularity==='technique' ? stat.topCombinedAgainst : (stat as any).topTargetAgainst) as any} labelJa={labelJa} />
+ 318           </View>
+ 319 
+ 320           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 321           </View>
+ 322           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 323             <Heading level={6}>{t('dashboard.vsStance') || '対変刀勝率'}</Heading>
+ 324             <View className="table-wrap">
+ 325               <Table variation="bordered" highlightOnHover>
+ 326                 <TableHead>
+ 327                   <TableRow>
+ 328                     <TableCell as="th">{t('stance.stance')||'構え'}</TableCell>
+ 329                     <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+ 330                     <TableCell as="th">{t('dashboard.wins')}</TableCell>
+ 331                     <TableCell as="th">{t('dashboard.losses')}</TableCell>
+ 332                     <TableCell as="th">{t('dashboard.draws')}</TableCell>
+ 333                     <TableCell as="th">{t('dashboard.winRate')||'Win %'}</TableCell>
+ 334                   </TableRow>
+ 335                 </TableHead>
+ 336                 <TableBody>
+ 337                   {(()=>{ const s=(stat as any).vsStance?.JODAN||{bouts:0,wins:0,losses:0,draws:0}; const wr=s.bouts? (s.wins/s.bouts*100).toFixed(1)+'%':'-'; return (
+ 338                     <TableRow>
+ 339                       <TableCell>{t('stance.JODAN')||'上段'}</TableCell>
+ 340                       <TableCell>{s.bouts}</TableCell>
+ 341                       <TableCell>{s.wins}</TableCell>
+ 342                       <TableCell>{s.losses}</TableCell>
+ 343                       <TableCell>{s.draws}</TableCell>
+ 344                       <TableCell>{wr}</TableCell>
+ 345                     </TableRow>
+ 346                   )})()}
+ 347                   {(()=>{ const s=(stat as any).vsStance?.NITOU||{bouts:0,wins:0,losses:0,draws:0}; const wr=s.bouts? (s.wins/s.bouts*100).toFixed(1)+'%':'-'; return (
+ 348                     <TableRow>
+ 349                       <TableCell>{t('stance.NITOU')||'二刀'}</TableCell>
+ 350                       <TableCell>{s.bouts}</TableCell>
+ 351                       <TableCell>{s.wins}</TableCell>
+ 352                       <TableCell>{s.losses}</TableCell>
+ 353                       <TableCell>{s.draws}</TableCell>
+ 354                       <TableCell>{wr}</TableCell>
+ 355                     </TableRow>
+ 356                   )})()}
+ 357                 </TableBody>
+ 358               </Table>
+ 359             </View>
+ 360           </View>
+ 361           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 362             <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden', marginBottom:12}}>
+ 363               <Heading level={6}>{t('dashboard.timeInBout') || '経過秒分布'}</Heading>
+ 364               <TimeInBoutHistogram binsFor={(stat as any).tForBins} binsAgainst={(stat as any).tAgainstBins} binSizeSec={BIN_SIZE_SEC} />
+ 365             </View>
+ 366             <Heading level={6}>{t('dashboard.vsOpponents')}</Heading>
+ 367             <View className="table-wrap">
+ 368             <Table variation="bordered" highlightOnHover>
+ 369               <TableHead>
+ 370                 <TableRow>
+ 371                   <TableCell as="th">{t('dashboard.opponent')}</TableCell>
+ 372                   <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+ 373                   <TableCell as="th">{t('dashboard.wins')}</TableCell>
+ 374                   <TableCell as="th">{t('dashboard.losses')}</TableCell>
+ 375                   <TableCell as="th">{t('dashboard.draws')}</TableCell>
+ 376                   <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
+ 377                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+ 378                   <TableCell as="th">??</TableCell>
+ 379                 </TableRow>
+ 380               </TableHead>
+ 381               <TableBody>
+ 382                 {stat.vsTop.map(([oppId, v])=> {
+ 383                   // count notes for this opponent across matches for selected player
+ 384                   let c = 0
+ 385                   for(const n of notes){
+ 386                     const m = matches.find(mm=> mm.id===n.matchId)
+ 387                     if(!m) continue
+ 388                     for(const b of (m.bouts?.items ?? [])){
+ 389                       const isLeft = b.ourPlayerId===playerId
+ 390                       const isRight = b.opponentPlayerId===playerId
+ 391                       if(!isLeft && !isRight) continue
+ 392                       const thisOpp = isLeft ? b.opponentPlayerId : b.ourPlayerId
+ 393                       if(thisOpp===oppId){ c++; break }
+ 394                     }
+ 395                   }
+ 396                   return (
+ 397                     <TableRow key={oppId}>
+ 398                       <TableCell>{players[oppId] ?? oppId}</TableCell>
+ 399                       <TableCell>{v.bouts}</TableCell>
+ 400                       <TableCell>{v.wins}</TableCell>
+ 401                       <TableCell>{v.losses}</TableCell>
+ 402                       <TableCell>{v.draws}</TableCell>
+ 403                       <TableCell>{v.pf}</TableCell>
+ 404                       <TableCell>{v.pa}</TableCell>
+ 405                       <TableCell>{c>0 ? `?? ${c}` : ''}</TableCell>
+ 406                     </TableRow>
+ 407                   )
+ 408                 })}
+ 409               </TableBody>
+ 410             </Table>
+ 411             </View>
+ 412           </View>
+ 413           {/* Player overall analysis (per player, not per match) */}
+ 414           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 415             <Heading level={6}>{t('analysis.overallTitle')||'選手全体分析'}</Heading>
+ 416             <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:8, marginTop:8 }}>
+ 417               <textarea rows={4} value={overallNote} onChange={(e)=> setOverallNote(e.target.value)} placeholder={t('analysis.overallPh')||'選手全体の所感・課題・方針など'} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+ 418               <div className="no-print" style={{ display:'flex', justifyContent:'flex-end' }}>
+ 419                 <Button size="small" onClick={saveOverall} isLoading={overallSaving} isDisabled={!playerId}>{t('actions.save')||'保存'}</Button>
+ 420               </div>
+ 421             </div>
+ 422           </View>
+ 423 
+ 424           {/* Player qualitative analysis (per match) */}
+ 425           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 426             <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+ 427             <div className="no-print" style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
+ 428               <Button size="small" onClick={openAddNote} isDisabled={!playerId || playerMatches().length===0}>{t('analysis.add')||'コメント追加'}</Button>
+ 429             </div>
+ 430             {notes.length===0 ? (
+ 431               <div className="muted" style={{ fontSize:12 }}>{t('analysis.noNotes')||'コメントはありません'}</div>
+ 432             ) : (
+ 433               <View className="table-wrap">
+ 434                 <Table variation="bordered" highlightOnHover>
+ 435                   <TableHead>
+ 436                     <TableRow>
+ 437                       <TableCell as="th">{t('labels.match')||'試合/日付'}</TableCell>
+ 438                       <TableCell as="th">{t('analysis.comment')||'コメント'}</TableCell>
+ 439                       <TableCell as="th"></TableCell>
+ 440                     </TableRow>
+ 441                   </TableHead>
+ 442                   <TableBody>
+ 443                     {notes.map((n,i)=>{
+ 444                       const m = matches.find(mm=> mm.id===n.matchId)
+ 445                       const title = m ? `${(m as any).heldOn||''} ${(m as any).tournament||''}` : n.matchId
+ 446                       return (
+ 447                         <TableRow key={n.matchId+String(i)}>
+ 448                           <TableCell>{title}</TableCell>
+ 449                           <TableCell>{n.comment}</TableCell>
+ 450                           <TableCell><Button size="small" variation="link" onClick={()=> openEditNote(n.matchId, n.comment)}>{t('analysis.edit')||'編集'}</Button></TableCell>
+ 451                         </TableRow>
+ 452                       )
+ 453                     })}
+ 454                   </TableBody>
+ 455                 </Table>
+ 456               </View>
+ 457             )}
+ 458           </View>
+ 459         </View>
+ 460       )}
+ 461       {noteModal.open && (
+ 462         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNoteModal({ open:false, matchId:'', text:'' })}>
+ 463           <div style={{ background:'#fff', minWidth:360, maxWidth:720, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+ 464             <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+ 465             <div style={{ display:'grid', gap:8, marginTop:12 }}>
+ 466               <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'center' }}>
+ 467                 <div style={{ fontSize:13 }}>{t('labels.match')||'試合/日付'}</div>
+ 468                 <select value={noteModal.matchId} onChange={(e)=> setNoteModal(m=> ({ ...m, matchId: e.target.value }))} style={{ padding:'6px 8px', fontSize:13 }}>
+ 469                   {playerMatches().map(m=> (<option key={m.id} value={m.id}>{(m as any).heldOn||''} {(m as any).tournament||''}</option>))}
+ 470                 </select>
+ 471               </div>
+ 472               <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'start' }}>
+ 473                 <div style={{ fontSize:13 }}>{t('analysis.comment')||'コメント'}</div>
+ 474                 <textarea rows={4} value={noteModal.text} onChange={(e)=> setNoteModal(m=> ({ ...m, text: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+ 475               </div>
+ 476             </div>
+ 477             <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+ 478               <Button variation="link" onClick={()=> setNoteModal({ open:false, matchId:'', text:'' })}>{t('action.cancel')||'キャンセル'}</Button>
+ 479               <Button variation="primary" onClick={saveNote} isDisabled={!noteModal.matchId || !playerId}>{t('actions.save')||'保存'}</Button>
+ 480             </div>
+ 481           </div>
+ 482         </div>
+ 483       )}
+ 484     </View>
+ 485   )
+ 486 }
+ 487 
+ 488 // Simple legend for pie items: expects [ [key,count], ... ]
+ 489 function Legend(props:{ items: [string,number][], labelJa: { target: Record<string,string>, method: Record<string,string> } }){
+ 490   const { items, labelJa } = props
+ 491   const label = (key:string)=>{
+ 492     if(key==='HANSOKU') return '反則'
+ 493     const [t, rest] = key.split(':')
+ 494     if(!rest) return labelJa.target[t] ?? t
+ 495     const methods = rest.split('+')
+ 496     const tlabel = labelJa.target[t] ?? t
+ 497     if(methods.length===0 || (methods.length===1 && methods[0]==='')) return tlabel
+ 498     return methods.map(m=> (labelJa.method[m] ?? m)+tlabel).join(' / ')
+ 499   }
+ 500   return (
+ 501     <div style={{ marginTop:6, display:'grid', gap:4 }}>
+ 502       {items.map(([k,c],i)=> (
+ 503         <div key={k} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
+ 504           <div style={{ width:10, height:10, background:PALETTE[i % PALETTE.length], borderRadius:2 }} />
+ 505           <div style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{label(k)}</div>
+ 506           <div style={{ color:'#666' }}>{c}</div>
+ 507         </div>
+ 508       ))}
+ 509     </div>
+ 510   )
+ 511 }
+ 512 
+ 513 // Hour-of-day histogram (0-23) for For/Against
+ 514 function TimeHistogram(props:{ forHours:number[]; againstHours:number[] }){
+ 515   const { forHours, againstHours } = props
+ 516   const max = Math.max(1, ...forHours, ...againstHours)
+ 517   return (
+ 518     <div style={{ display:'grid', gridTemplateColumns:'repeat(24,1fr)', gap:2, alignItems:'end', height:120 }}>
+ 519       {new Array(24).fill(0).map((_,h)=>{
+ 520         const f = forHours[h]||0; const a = againstHours[h]||0
+ 521         const fh = Math.round((f/max)*100); const ah = Math.round((a/max)*100)
+ 522         return (
+ 523           <div key={h} title={`${h}:00`} style={{ display:'grid', gap:2 }}>
+ 524             <div style={{ background:'#4caf50', height:`${fh}%`, width:'100%' }} />
+ 525             <div style={{ background:'#f44336', height:`${ah}%`, width:'100%' }} />
+ 526             <div style={{ fontSize:10, textAlign:'center', color:'#666' }}>{h}</div>
+ 527           </div>
+ 528         )
+ 529       })}
+ 530     </div>
+ 531   )
+ 532 }
+ 533 
+ 534 // Time-in-bout histogram by seconds (stacked per bin)
+ 535 function TimeInBoutHistogram(props:{ binsFor:number[]; binsAgainst:number[]; binSizeSec:number }){
+ 536   const { binsFor, binsAgainst, binSizeSec } = props
+ 537   const n = Math.max(binsFor.length, binsAgainst.length)
+ 538   const max = Math.max(1, ...binsFor, ...binsAgainst)
+ 539   return (
+ 540     <div style={{ display:'grid', gridTemplateColumns:`repeat(${n},1fr)`, gap:2, alignItems:'end', height:120 }}>
+ 541       {new Array(n).fill(0).map((_,i)=>{
+ 542         const f = binsFor[i]||0; const a = binsAgainst[i]||0
+ 543         const fh = Math.round((f/max)*100); const ah = Math.round((a/max)*100)
+ 544         const start = i*binSizeSec
+ 545         const end = start + binSizeSec
+ 546         return (
+ 547           <div key={i} title={`${start}-${end}s`} style={{ display:'grid', gap:2 }}>
+ 548             <div style={{ background:'#4caf50', height:`${fh}%`, width:'100%' }} />
+ 549             <div style={{ background:'#f44336', height:`${ah}%`, width:'100%' }} />
+ 550             <div style={{ fontSize:10, textAlign:'center', color:'#666' }}>{start}</div>
+ 551           </div>
+ 552         )
+ 553       })}
+ 554     </div>
+ 555   )
+ 556 }
+ 557 
+ 558 
+ 559 
+ 560 
