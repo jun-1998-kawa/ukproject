@@ -1,0 +1,120 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+
+// Shared color palette for charts/legend
+const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
+
+type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
+type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null; recordedAt?: string | null }
+
+type Master = { code: string; nameJa?: string; nameEn?: string }
+
+export default function Dashboard(props:{
+  matches: Match[]
+  players: Record<string,string>
+  masters: { targets: Master[]; methods: Master[] }
+  labelJa: { target: Record<string,string>, method: Record<string,string> }
+  homeUniversityId?: string
+  apiUrl?: string
+  getToken?: ()=> Promise<string|null>
+}){
+  const { t } = useTranslation()
+  const { matches, players, labelJa, homeUniversityId } = props
+  const [playerId, setPlayerId] = useState<string>('')
+  const [from, setFrom] = useState<string>('')
+  const [to, setTo] = useState<string>('')
+  const [tournamentFilter, setTournamentFilter] = useState<string>('')
+  const [granularity, setGranularity] = useState<'target'|'technique'>('technique')
+  const TOP_N = 5
+  const BIN_SIZE_SEC = 15
+  const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [notes, setNotes] = useState<{ matchId:string, comment:string }[]>([])
+
+  const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
+
+  // Persist filter in localStorage (share same key with App to keep consistent)
+  useEffect(()=>{
+    try{
+      const saved = localStorage.getItem('filters:type')
+      if(saved==="official"||saved==="practice"||saved==="all"||saved==="intra"){ setOfficialFilter(saved as any) }
+    }catch{}
+  },[])
+  useEffect(()=>{ try{ localStorage.setItem('filters:type', officialFilter) }catch{} }, [officialFilter])
+  // Fetch qualitative notes for selected player
+  useEffect(()=>{
+    (async()=>{
+      setNotes([])
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
+
+  const stat = useMemo(()=>{
+    if(!playerId) return null
+    const filtered = matches.filter(m=>{
+      if(from && m.heldOn < from) return false
+      if(to && m.heldOn > to) return false
+      if(officialFilter==='official' && (m as any).isOfficial === false) return false
+      if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+      if(officialFilter==='intra' && (!homeUniversityId || (m as any).ourUniversityId!==homeUniversityId || (m as any).opponentUniversityId!==homeUniversityId)) return false
+      if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+      if(tournamentFilter && !(m as any).tournament) return false
+      return true
+    })
+    const combinedFor: Record<string, number> = {}
+    const combinedAgainst: Record<string, number> = {}
+    const targetOnlyFor: Record<string, number> = {}
+    const targetOnlyAgainst: Record<string, number> = {}
+    const vs: Record<string, { bouts:number; wins:number; losses:number; draws:number; pf:number; pa:number }> = {}
+    let wins=0, losses=0, draws=0, bouts=0, pf=0, pa=0
+    const times:number[]=[]
+    const hoursFor = new Array(24).fill(0)
+    const hoursAgainst = new Array(24).fill(0)
+    // time-in-bout bins by seconds
+    const tForBins: number[] = []
+    const tAgainstBins: number[] = []
+    const incBin = (arr:number[], t:number)=>{ const idx = Math.floor(Math.max(0,t)/Math.max(1,BIN_SIZE_SEC)); arr[idx] = (arr[idx]||0)+1 }
+    const stanceKey = (s?:string|null)=> s==='JODAN' ? 'JODAN' : ((s||'').startsWith('NITOU') ? 'NITOU' : '')
+    const vsStance: Record<string, { bouts:number; wins:number; losses:number; draws:number }> = { JODAN:{bouts:0,wins:0,losses:0,draws:0}, NITOU:{bouts:0,wins:0,losses:0,draws:0} }
+
+    for(const m of filtered){
+      for(const b of (m.bouts?.items ?? [])){
+        const isLeft = b.ourPlayerId===playerId
+        const isRight = b.opponentPlayerId===playerId
+        if(!isLeft && !isRight) continue
+        bouts++
+        const oppId = isLeft ? b.opponentPlayerId : b.ourPlayerId
+        const opp = (vs[oppId] ||= { bouts:0, wins:0, losses:0, draws:0, pf:0, pa:0 });
+        opp.bouts++
+        if(b.winType==='DRAW'){ draws++; opp.draws++; const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++; vsStance[sk].draws++ } }
+        else if(b.winnerPlayerId){
+          const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++ }
+          if(b.winnerPlayerId===playerId){ wins++; opp.wins++; if(sk) vsStance[sk].wins++ } else { losses++; opp.losses++; if(sk) vsStance[sk].losses++ }
+        }
+        for(const p of (b.points?.items ?? [])){
+          if(p.scorerPlayerId===playerId){
+            pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
+            if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
+            const key = buildTechniqueKey(p.target||'', p.methods||[])
+              combinedAgainst[key] = (combinedAgainst[key]||0)+1
+            combinedFor[key] = (combinedFor[key]||0)+1
+            if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
+            if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
+            if(typeof p.tSec==='number') incBin(tForBins, p.tSec)
+          } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
+            pa++; opp.pa++
+            if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
+            else {
+              const key = buildTechniqueKey(p.target||'', p.methods||[])
+              combinedAgainst[key] = (combinedAgainst[key]||0)+1
+              if(p.target) targetOnlyAgainst[p.target] = (targetOnlyAgainst[p.target]||0)+1
+            }
+            if(p.recordedAt){ const hh = new Date(p.recordedAt).getHours(); if(!Number.isNaN(hh)) hoursAgainst[hh]++ }

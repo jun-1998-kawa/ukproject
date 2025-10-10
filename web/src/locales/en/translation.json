@@ -42,5 +42,14 @@
     "title": "YouTube Playlists by Tournament",
     "help": "Enter a URL or playlist ID (list=...). Empty clears the setting.",
     "noTournaments": "No tournament names"
+  },
+  "analysis": {
+    "overallTitle": "Overall Analysis",
+    "overallPh": "Overall observations, strengths, areas to improve, plan",
+    "playerNotes": "Player Analysis",
+    "comment": "Comment",
+    "noNotes": "No comments",
+    "add": "Add Comment",
+    "edit": "Edit"
   }
 }

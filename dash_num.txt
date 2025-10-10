@@ -1,0 +1,377 @@
+   1 import { useEffect, useMemo, useState } from 'react'
+   2 import { useTranslation } from 'react-i18next'
+   3 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+   4 
+   5 // Shared color palette for charts/legend
+   6 const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
+   7 
+   8 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
+   9 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+  10 type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null; recordedAt?: string | null }
+  11 
+  12 type Master = { code: string; nameJa?: string; nameEn?: string }
+  13 
+  14 export default function Dashboard(props:{
+  15   matches: Match[]
+  16   players: Record<string,string>
+  17   masters: { targets: Master[]; methods: Master[] }
+  18   labelJa: { target: Record<string,string>, method: Record<string,string> }
+  19   homeUniversityId?: string
+  20 }){
+  21   const { t } = useTranslation()
+  22   const { matches, players, labelJa, homeUniversityId } = props
+  23   const [playerId, setPlayerId] = useState<string>('')
+  24   const [from, setFrom] = useState<string>('')
+  25   const [to, setTo] = useState<string>('')
+  26   const [tournamentFilter, setTournamentFilter] = useState<string>('')
+  27   const [granularity, setGranularity] = useState<'target'|'technique'>('technique')
+  28   const TOP_N = 5
+  29   const BIN_SIZE_SEC = 15
+  30   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  31 
+  32   const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
+  33 
+  34   // Persist filter in localStorage (share same key with App to keep consistent)
+  35   useEffect(()=>{
+  36     try{
+  37       const saved = localStorage.getItem('filters:type')
+  38       if(saved==="official"||saved==="practice"||saved==="all"||saved==="intra"){ setOfficialFilter(saved as any) }
+  39     }catch{}
+  40   },[])
+  41   useEffect(()=>{ try{ localStorage.setItem('filters:type', officialFilter) }catch{} }, [officialFilter])
+  42 
+  43   const stat = useMemo(()=>{
+  44     if(!playerId) return null
+  45     const filtered = matches.filter(m=>{
+  46       if(from && m.heldOn < from) return false
+  47       if(to && m.heldOn > to) return false
+  48       if(officialFilter==='official' && (m as any).isOfficial === false) return false
+  49       if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+  50       if(officialFilter==='intra' && (!homeUniversityId || (m as any).ourUniversityId!==homeUniversityId || (m as any).opponentUniversityId!==homeUniversityId)) return false
+  51       if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+  52       if(tournamentFilter && !(m as any).tournament) return false
+  53       return true
+  54     })
+  55     const combinedFor: Record<string, number> = {}
+  56     const combinedAgainst: Record<string, number> = {}
+  57     const targetOnlyFor: Record<string, number> = {}
+  58     const targetOnlyAgainst: Record<string, number> = {}
+  59     const vs: Record<string, { bouts:number; wins:number; losses:number; draws:number; pf:number; pa:number }> = {}
+  60     let wins=0, losses=0, draws=0, bouts=0, pf=0, pa=0
+  61     const times:number[]=[]
+  62     const hoursFor = new Array(24).fill(0)
+  63     const hoursAgainst = new Array(24).fill(0)
+  64     // time-in-bout bins by seconds
+  65     const tForBins: number[] = []
+  66     const tAgainstBins: number[] = []
+  67     const incBin = (arr:number[], t:number)=>{ const idx = Math.floor(Math.max(0,t)/Math.max(1,BIN_SIZE_SEC)); arr[idx] = (arr[idx]||0)+1 }
+  68     const stanceKey = (s?:string|null)=> s==='JODAN' ? 'JODAN' : ((s||'').startsWith('NITOU') ? 'NITOU' : '')
+  69     const vsStance: Record<string, { bouts:number; wins:number; losses:number; draws:number }> = { JODAN:{bouts:0,wins:0,losses:0,draws:0}, NITOU:{bouts:0,wins:0,losses:0,draws:0} }
+  70 
+  71     for(const m of filtered){
+  72       for(const b of (m.bouts?.items ?? [])){
+  73         const isLeft = b.ourPlayerId===playerId
+  74         const isRight = b.opponentPlayerId===playerId
+  75         if(!isLeft && !isRight) continue
+  76         bouts++
+  77         const oppId = isLeft ? b.opponentPlayerId : b.ourPlayerId
+  78         const opp = (vs[oppId] ||= { bouts:0, wins:0, losses:0, draws:0, pf:0, pa:0 });
+  79         opp.bouts++
+  80         if(b.winType==='DRAW'){ draws++; opp.draws++; const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++; vsStance[sk].draws++ } }
+  81         else if(b.winnerPlayerId){
+  82           const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++ }
+  83           if(b.winnerPlayerId===playerId){ wins++; opp.wins++; if(sk) vsStance[sk].wins++ } else { losses++; opp.losses++; if(sk) vsStance[sk].losses++ }
+  84         }
+  85         for(const p of (b.points?.items ?? [])){
+  86           if(p.scorerPlayerId===playerId){
+  87             pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
+  88             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
+  89             const key = buildTechniqueKey(p.target||'', p.methods||[])
+  90               combinedAgainst[key] = (combinedAgainst[key]||0)+1
+  91             combinedFor[key] = (combinedFor[key]||0)+1
+  92             if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
+  93             if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
+  94             if(typeof p.tSec==='number') incBin(tForBins, p.tSec)
+  95           } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
+  96             pa++; opp.pa++
+  97             if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
+  98             else {
+  99               const key = buildTechniqueKey(p.target||'', p.methods||[])
+ 100               combinedAgainst[key] = (combinedAgainst[key]||0)+1
+ 101               if(p.target) targetOnlyAgainst[p.target] = (targetOnlyAgainst[p.target]||0)+1
+ 102             }
+ 103             if(p.recordedAt){ const hh = new Date(p.recordedAt).getHours(); if(!Number.isNaN(hh)) hoursAgainst[hh]++ }
+ 104             if(typeof p.tSec==='number') incBin(tAgainstBins, p.tSec)
+ 105           }
+ 106         }
+ 107       }
+ 108     }
+ 109     const avgTime = times.length ? (times.reduce((a,b)=>a+b,0)/times.length) : null
+ 110     const winRate = bouts ? wins/bouts : 0
+ 111     const vsTop = Object.entries(vs).sort((a,b)=> b[1].bouts - a[1].bouts).slice(0,8)
+ 112     const fastest = times.length ? Math.min(...times) : null
+ 113     const slowest = times.length ? Math.max(...times) : null
+ 114     const ppg = bouts ? pf / bouts : 0
+ 115     const diff = pf - pa
+ 116     const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 117     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 118     const topTargetFor = Object.entries(targetOnlyFor).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 119     const topTargetAgainst = Object.entries(targetOnlyAgainst).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+ 120     const vsHentou = (()=>{ const j=vsStance.JODAN, n=vsStance.NITOU; const b=j.bouts+n.bouts, w=j.wins+n.wins, l=j.losses+n.losses, d=j.draws+n.draws; return { bouts:b, wins:w, losses:l, draws:d, winRate: b? (w/b): 0 } })()
+ 121     return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst, topTargetFor, topTargetAgainst, vsTop, hoursFor, hoursAgainst, tForBins, tAgainstBins, vsStance, vsHentou }
+ 122   }, [matches, playerId, from, to, tournamentFilter, officialFilter, homeUniversityId])
+ 123 
+ 124   function labelTarget(code:string){ return labelJa.target[code] ?? code }
+ 125   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
+ 126   function buildTechniqueKey(target?: string|null, methods?: string[]|null){
+ 127     const mm = methods ?? []
+ 128     return `${target||''}:${mm.join('+')}`
+ 129   }
+ 130   function labelTechnique(targetCode?: string|null, methods?: string[]|null){
+ 131     if(!targetCode) return '-'
+ 132     const tlabel = labelJa.target[targetCode] ?? targetCode
+ 133     const mm = methods ?? []
+ 134     if(mm.length===0) return tlabel
+ 135     return mm.map(m=> `${labelJa.method[m] ?? m}${tlabel}`).join(' / ')
+ 136   }
+ 137 
+ 138   function PieChart({items, size=140}:{ items: [string, number][], size?:number }){
+ 139     const total = items.reduce((s, [,v])=> s+v, 0)
+ 140     if(total<=0) return <div>-</div>
+ 141     const r = size/2, cx=r, cy=r
+ 142     const nonZeroIdx = items.findIndex(([,v])=> v>0)
+ 143     if(items.filter(([,v])=> v>0).length===1 && nonZeroIdx>=0){
+ 144       const color = PALETTE[nonZeroIdx % PALETTE.length]
+ 145       return (
+ 146         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+ 147           <circle cx={cx} cy={cy} r={r} fill={color} />
+ 148         </svg>
+ 149       )
+ 150     }
+ 151     let acc = 0
+ 152     const paths = items.map(([,v],i)=>{
+ 153       const a0 = (acc/total)*2*Math.PI; acc += v; const a1 = (acc/total)*2*Math.PI
+ 154       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
+ 155       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
+ 156       const large = (a1-a0) > Math.PI ? 1 : 0
+ 157       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
+ 158       return (<path key={i} d={d} fill={PALETTE[i%PALETTE.length]} stroke="#fff" strokeWidth={1} />)
+ 159     })
+ 160     return (<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>)
+ 161   }
+ 162 
+ 163   return (
+ 164     <View className="min-w-0">
+ 165       <Heading level={4}>{t('dashboard.title')}</Heading>
+ 166       <View marginTop="0.5rem">
+ 167         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
+ 168           <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="18rem">
+ 169             <option value="">--</option>
+ 170             {playerList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
+ 171           </SelectField>
+ 172           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
+ 173           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
+ 174           <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">
+ 175             <option value="all">{t('filters.all')}</option>
+ 176             <option value="official">{t('filters.official')}</option>
+ 177             <option value="practice">{t('filters.practice')}</option>
+ 178             <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
+ 179           </SelectField>
+ 180           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
+ 181           <SelectField label={t('dashboard.granularity')||'Granularity'} value={granularity} onChange={e=> setGranularity(e.target.value as any)} size="small" width="12rem">
+ 182             <option value="technique">{t('dashboard.gran.technique')||'Technique x Target'}</option>
+ 183             <option value="target">{t('dashboard.gran.target')||'Target only'}</option>
+ 184           </SelectField>
+ 185           <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setOfficialFilter('all') }}>{t('dashboard.clear')}</Button>
+ 186         </Flex>
+ 187       </View>
+ 188 
+ 189       {!playerId && (
+ 190         <View marginTop="0.75rem" color="#666">{t('dashboard.noData')}</View>
+ 191       )}
+ 192 
+ 193       {playerId && stat && (
+ 194         <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:12, minWidth:0}}>
+ 195           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 196             <Heading level={6}>{t('dashboard.stats')}</Heading>
+ 197             <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : (officialFilter==='practice' ? t('filters.practice') : (t('filters.intra')||'Intra-squad'))}</b></div>
+ 198             <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>
+ 199             <div>{t('dashboard.wins')}: <b>{stat.wins}</b> / {t('dashboard.losses')}: <b>{stat.losses}</b> / {t('dashboard.draws')}: <b>{stat.draws}</b></div>
+ 200             <div>{t('dashboard.winRate')}: <b>{(stat.winRate*100).toFixed(1)}%</b></div>
+ 201             <div>{t('dashboard.pointsFor')}: <b>{stat.pf}</b> / {t('dashboard.pointsAgainst')}: <b>{stat.pa}</b></div>
+ 202             <div>{t('dashboard.avgTimeToScore')}: <b>{stat.avgTime==null?'-':stat.avgTime.toFixed(1)+'s'}</b></div>
+ 203             <div>{t('dashboard.fastest')}: <b>{stat.fastest==null?'-':stat.fastest+'s'}</b> / {t('dashboard.slowest')}: <b>{stat.slowest==null?'-':stat.slowest+'s'}</b></div>
+ 204             <div>{t('dashboard.pointsPerBout')}: <b>{stat.ppg.toFixed(2)}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
+ 205             <div>{t('dashboard.vsHentou')||'対変刀'}: <b>{(((stat as any).vsHentou?.winRate||0)*100).toFixed(1)}%</b> <span className="muted">({(stat as any).vsHentou?.wins||0}-{(stat as any).vsHentou?.losses||0}-{(stat as any).vsHentou?.draws||0} / {(stat as any).vsHentou?.bouts||0})</span></div>
+ 206           </View>
+ 207 
+ 208           <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 209             <Heading level={6}>{t('dashboard.pieFor')}</Heading>
+ 210             <div className="graph">
+ 211               <PieChart items={(granularity==='technique' ? stat.topCombinedFor : (stat as any).topTargetFor) as any} />
+ 212             </div>
+ 213             <Legend items={(granularity==='technique' ? stat.topCombinedFor : (stat as any).topTargetFor) as any} labelJa={labelJa} />
+ 214 
+ 215           </View>
+ 216           <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 217             <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
+ 218             <div className="graph">
+ 219               <PieChart items={(granularity==='technique' ? stat.topCombinedAgainst : (stat as any).topTargetAgainst) as any} />
+ 220             </div>
+ 221             <Legend items={(granularity==='technique' ? stat.topCombinedAgainst : (stat as any).topTargetAgainst) as any} labelJa={labelJa} />
+ 222           </View>
+ 223 
+ 224           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 225           </View>
+ 226           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 227             <Heading level={6}>{t('dashboard.vsStance') || '対変刀勝率'}</Heading>
+ 228             <View className="table-wrap">
+ 229               <Table variation="bordered" highlightOnHover>
+ 230                 <TableHead>
+ 231                   <TableRow>
+ 232                     <TableCell as="th">{t('stance.stance')||'構え'}</TableCell>
+ 233                     <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+ 234                     <TableCell as="th">{t('dashboard.wins')}</TableCell>
+ 235                     <TableCell as="th">{t('dashboard.losses')}</TableCell>
+ 236                     <TableCell as="th">{t('dashboard.draws')}</TableCell>
+ 237                     <TableCell as="th">{t('dashboard.winRate')||'Win %'}</TableCell>
+ 238                   </TableRow>
+ 239                 </TableHead>
+ 240                 <TableBody>
+ 241                   {(()=>{ const s=(stat as any).vsStance?.JODAN||{bouts:0,wins:0,losses:0,draws:0}; const wr=s.bouts? (s.wins/s.bouts*100).toFixed(1)+'%':'-'; return (
+ 242                     <TableRow>
+ 243                       <TableCell>{t('stance.JODAN')||'上段'}</TableCell>
+ 244                       <TableCell>{s.bouts}</TableCell>
+ 245                       <TableCell>{s.wins}</TableCell>
+ 246                       <TableCell>{s.losses}</TableCell>
+ 247                       <TableCell>{s.draws}</TableCell>
+ 248                       <TableCell>{wr}</TableCell>
+ 249                     </TableRow>
+ 250                   )})()}
+ 251                   {(()=>{ const s=(stat as any).vsStance?.NITOU||{bouts:0,wins:0,losses:0,draws:0}; const wr=s.bouts? (s.wins/s.bouts*100).toFixed(1)+'%':'-'; return (
+ 252                     <TableRow>
+ 253                       <TableCell>{t('stance.NITOU')||'二刀'}</TableCell>
+ 254                       <TableCell>{s.bouts}</TableCell>
+ 255                       <TableCell>{s.wins}</TableCell>
+ 256                       <TableCell>{s.losses}</TableCell>
+ 257                       <TableCell>{s.draws}</TableCell>
+ 258                       <TableCell>{wr}</TableCell>
+ 259                     </TableRow>
+ 260                   )})()}
+ 261                 </TableBody>
+ 262               </Table>
+ 263             </View>
+ 264           </View>
+ 265           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+ 266             <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden', marginBottom:12}}>
+ 267               <Heading level={6}>{t('dashboard.timeInBout') || '経過秒分布'}</Heading>
+ 268               <TimeInBoutHistogram binsFor={(stat as any).tForBins} binsAgainst={(stat as any).tAgainstBins} binSizeSec={BIN_SIZE_SEC} />
+ 269             </View>
+ 270             <Heading level={6}>{t('dashboard.vsOpponents')}</Heading>
+ 271             <View className="table-wrap">
+ 272             <Table variation="bordered" highlightOnHover>
+ 273               <TableHead>
+ 274                 <TableRow>
+ 275                   <TableCell as="th">{t('dashboard.opponent')}</TableCell>
+ 276                   <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+ 277                   <TableCell as="th">{t('dashboard.wins')}</TableCell>
+ 278                   <TableCell as="th">{t('dashboard.losses')}</TableCell>
+ 279                   <TableCell as="th">{t('dashboard.draws')}</TableCell>
+ 280                   <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
+ 281                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+ 282                 </TableRow>
+ 283               </TableHead>
+ 284               <TableBody>
+ 285                 {stat.vsTop.map(([oppId, v])=> (
+ 286                   <TableRow key={oppId}>
+ 287                     <TableCell>{players[oppId] ?? oppId}</TableCell>
+ 288                     <TableCell>{v.bouts}</TableCell>
+ 289                     <TableCell>{v.wins}</TableCell>
+ 290                     <TableCell>{v.losses}</TableCell>
+ 291                     <TableCell>{v.draws}</TableCell>
+ 292                     <TableCell>{v.pf}</TableCell>
+ 293                     <TableCell>{v.pa}</TableCell>
+ 294                   </TableRow>
+ 295                 ))}
+ 296               </TableBody>
+ 297             </Table>
+ 298             </View>
+ 299           </View>
+ 300         </View>
+ 301       )}
+ 302     </View>
+ 303   )
+ 304 }
+ 305 
+ 306 // Simple legend for pie items: expects [ [key,count], ... ]
+ 307 function Legend(props:{ items: [string,number][], labelJa: { target: Record<string,string>, method: Record<string,string> } }){
+ 308   const { items, labelJa } = props
+ 309   const label = (key:string)=>{
+ 310     if(key==='HANSOKU') return '反則'
+ 311     const [t, rest] = key.split(':')
+ 312     if(!rest) return labelJa.target[t] ?? t
+ 313     const methods = rest.split('+')
+ 314     const tlabel = labelJa.target[t] ?? t
+ 315     if(methods.length===0 || (methods.length===1 && methods[0]==='')) return tlabel
+ 316     return methods.map(m=> (labelJa.method[m] ?? m)+tlabel).join(' / ')
+ 317   }
+ 318   return (
+ 319     <div style={{ marginTop:6, display:'grid', gap:4 }}>
+ 320       {items.map(([k,c],i)=> (
+ 321         <div key={k} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12 }}>
+ 322           <div style={{ width:10, height:10, background:PALETTE[i % PALETTE.length], borderRadius:2 }} />
+ 323           <div style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{label(k)}</div>
+ 324           <div style={{ color:'#666' }}>{c}</div>
+ 325         </div>
+ 326       ))}
+ 327     </div>
+ 328   )
+ 329 }
+ 330 
+ 331 // Hour-of-day histogram (0-23) for For/Against
+ 332 function TimeHistogram(props:{ forHours:number[]; againstHours:number[] }){
+ 333   const { forHours, againstHours } = props
+ 334   const max = Math.max(1, ...forHours, ...againstHours)
+ 335   return (
+ 336     <div style={{ display:'grid', gridTemplateColumns:'repeat(24,1fr)', gap:2, alignItems:'end', height:120 }}>
+ 337       {new Array(24).fill(0).map((_,h)=>{
+ 338         const f = forHours[h]||0; const a = againstHours[h]||0
+ 339         const fh = Math.round((f/max)*100); const ah = Math.round((a/max)*100)
+ 340         return (
+ 341           <div key={h} title={`${h}:00`} style={{ display:'grid', gap:2 }}>
+ 342             <div style={{ background:'#4caf50', height:`${fh}%`, width:'100%' }} />
+ 343             <div style={{ background:'#f44336', height:`${ah}%`, width:'100%' }} />
+ 344             <div style={{ fontSize:10, textAlign:'center', color:'#666' }}>{h}</div>
+ 345           </div>
+ 346         )
+ 347       })}
+ 348     </div>
+ 349   )
+ 350 }
+ 351 
+ 352 // Time-in-bout histogram by seconds (stacked per bin)
+ 353 function TimeInBoutHistogram(props:{ binsFor:number[]; binsAgainst:number[]; binSizeSec:number }){
+ 354   const { binsFor, binsAgainst, binSizeSec } = props
+ 355   const n = Math.max(binsFor.length, binsAgainst.length)
+ 356   const max = Math.max(1, ...binsFor, ...binsAgainst)
+ 357   return (
+ 358     <div style={{ display:'grid', gridTemplateColumns:`repeat(${n},1fr)`, gap:2, alignItems:'end', height:120 }}>
+ 359       {new Array(n).fill(0).map((_,i)=>{
+ 360         const f = binsFor[i]||0; const a = binsAgainst[i]||0
+ 361         const fh = Math.round((f/max)*100); const ah = Math.round((a/max)*100)
+ 362         const start = i*binSizeSec
+ 363         const end = start + binSizeSec
+ 364         return (
+ 365           <div key={i} title={`${start}-${end}s`} style={{ display:'grid', gap:2 }}>
+ 366             <div style={{ background:'#4caf50', height:`${fh}%`, width:'100%' }} />
+ 367             <div style={{ background:'#f44336', height:`${ah}%`, width:'100%' }} />
+ 368             <div style={{ fontSize:10, textAlign:'center', color:'#666' }}>{start}</div>
+ 369           </div>
+ 370         )
+ 371       })}
+ 372     </div>
+ 373   )
+ 374 }
+ 375 
+ 376 
+ 377 

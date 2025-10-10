@@ -1,0 +1,25 @@
+                      {r.tournament}
+                      {r.tournament && ytMap[r.tournament] && (
+                        <a href={ytMap[r.tournament]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>
+                      )}
+                    </TableCell>
+
+                    <TableCell>{r.teamWins}</TableCell>
+                    <TableCell>{r.oppWins}</TableCell>
+                    <TableCell>{r.draws}</TableCell>
+                    <TableCell>{r.result}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.tournamentRanking') || '‘å‰ïƒ‰ƒ“ƒLƒ“ƒO'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">#</TableCell>
+                  <TableCell as="th">{t('dashboard.tournament')||'‘å‰ï'}</TableCell>

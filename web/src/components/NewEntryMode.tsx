@@ -169,6 +169,10 @@ export default function NewEntryMode(props: {
   // YouTube playlist settings for current tournament
   const [ytOpen, setYtOpen] = useState(false)
   const [ytUrl, setYtUrl] = useState<string>('')
+  // Player qualitative notes
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [notes, setNotes] = useState<Record<string,string>>({})
+  const [notesLoading, setNotesLoading] = useState(false)
 
   useEffect(()=>{
     const init: Record<string, RowState> = {}
@@ -226,6 +230,44 @@ export default function NewEntryMode(props: {
     }finally{
       setYtOpen(false)
     }
+  }
+
+  const listNotesByMatch = `query ListPlayerNotesByMatch($matchId: ID!, $limit:Int){ listPlayerNotesByMatch(matchId:$matchId, limit:$limit){ items{ playerId matchId comment } } }`
+  const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
+  const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
+
+  function uniquePlayersInMatch(){
+    const ids = new Set<string>()
+    for(const b of boutsLocal){ ids.add(b.ourPlayerId); ids.add(b.opponentPlayerId) }
+    return Array.from(ids)
+  }
+  async function openNotes(){
+    setNoteOpen(true)
+    if(!matchId) return
+    setNotesLoading(true)
+    try{
+      const token = await getToken(); if(!token) return
+      const res: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: listNotesByMatch, variables: { matchId, limit: 500 } }) })
+      const j: any = await res.json(); const arr = (j?.data?.listPlayerNotesByMatch?.items ?? []) as any[]
+      const map: Record<string,string> = {}; for(const it of arr){ map[it.playerId] = it.comment }
+      setNotes(map)
+    }catch{}
+    finally{ setNotesLoading(false) }
+  }
+  async function saveNotes(){
+    if(!matchId) { setNoteOpen(false); return }
+    try{
+      const token = await getToken(); if(!token) return
+      for(const pid of uniquePlayersInMatch()){
+        const comment = (notes[pid]||'').trim()
+        if(comment){
+          const input: any = { playerId: pid, matchId, comment }
+          try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
+          try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+        }
+      }
+    }catch{}
+    setNoteOpen(false)
   }
 
   async function loadRefData(){
@@ -428,6 +470,7 @@ export default function NewEntryMode(props: {
           <option value="">{t('placeholders.unselected')}</option>
           {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
         </SelectField>
+        <Button size="small" onClick={openNotes} isDisabled={!matchId}>{t('analysis.playerNotes')||'選手分析'}</Button>
         <Button size="small" variation="primary" onClick={saveAll} isDisabled={bouts.length===0}>{t('actions.saveAll')}</Button>
         {matchId && (
           <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'match', targetId: matchId, bout: null })}>{t('actions.deleteMatch')}</Button>
@@ -581,6 +624,29 @@ export default function NewEntryMode(props: {
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
             <Button variation="link" onClick={()=> setYtOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
             <Button variation="primary" onClick={saveYtForTournament}>{t('actions.save')||'保存'}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    {noteOpen && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNoteOpen(false)}>
+        <div style={{ background:'#fff', minWidth:360, maxWidth:820, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <Heading level={5}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+          {notesLoading ? (
+            <div className="muted" style={{ padding:'12px 0' }}>{t('loading')||'Loading...'}</div>
+          ) : (
+            <div style={{ display:'grid', gap:8, marginTop:8, maxHeight:'60vh', overflow:'auto' }}>
+              {uniquePlayersInMatch().map(pid=> (
+                <div key={pid} style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'start' }}>
+                  <div style={{ fontSize:13 }}>{players[pid] || pid}</div>
+                  <textarea value={notes[pid]||''} onChange={e=> setNotes(m=> ({...m, [pid]: e.target.value }))} rows={3} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+            <Button variation="link" onClick={()=> setNoteOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
+            <Button variation="primary" onClick={saveNotes} isDisabled={!matchId}>{t('actions.save')||'保存'}</Button>
           </div>
         </div>
       </div>
