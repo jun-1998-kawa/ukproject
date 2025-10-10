@@ -17,6 +17,8 @@ export default function Dashboard(props:{
   masters: { targets: Master[]; methods: Master[] }
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
+  apiUrl?: string
+  getToken?: ()=> Promise<string|null>
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
@@ -28,6 +30,10 @@ export default function Dashboard(props:{
   const TOP_N = 5
   const BIN_SIZE_SEC = 15
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [notes, setNotes] = useState<{ matchId:string, comment:string }[]>([])
+  const [noteModal, setNoteModal] = useState<{ open:boolean; matchId:string; text:string }>( { open:false, matchId:'', text:'' } )
+  const [overallNote, setOverallNote] = useState<string>('')
+  const [overallSaving, setOverallSaving] = useState<boolean>(false)
 
   const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
 
@@ -39,6 +45,96 @@ export default function Dashboard(props:{
     }catch{}
   },[])
   useEffect(()=>{ try{ localStorage.setItem('filters:type', officialFilter) }catch{} }, [officialFilter])
+  // Fetch qualitative notes for selected player
+  useEffect(()=>{
+    (async()=>{
+      setNotes([])
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
+
+  const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
+  const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
+  const getPlayerQuery = `query GetPlayer($id:ID!){ getPlayer(id:$id){ id notes } }`
+  const updatePlayerMut = `mutation UpdatePlayer($input: UpdatePlayerInput!){ updatePlayer(input:$input){ id } }`
+
+  function playerMatches(){
+    if(!playerId) return [] as Match[]
+    const arr: Match[] = []
+    for(const m of matches){
+      const has = (m.bouts?.items ?? []).some(b=> b.ourPlayerId===playerId || b.opponentPlayerId===playerId)
+      if(has) arr.push(m)
+    }
+    return arr
+  }
+  function openAddNote(){
+    const pm = playerMatches()
+    const firstId = pm[0]?.id || ''
+    setNoteModal({ open:true, matchId:firstId, text:'' })
+  }
+  function openEditNote(mId:string, text:string){ setNoteModal({ open:true, matchId:mId, text }) }
+  async function saveNote(){
+    if(!props.apiUrl || !props.getToken || !playerId || !noteModal.matchId) { setNoteModal({ open:false, matchId:'', text:'' }); return }
+    try{
+      const token = await props.getToken(); if(!token) return
+      const input:any = { playerId, matchId: noteModal.matchId, comment: (noteModal.text||'').trim() }
+      if(!input.comment){ setNoteModal({ open:false, matchId:'', text:'' }); return }
+      try{ await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
+      try{ await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+      // refresh list
+      const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+      const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+      const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+      setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+    }catch{}
+    setNoteModal({ open:false, matchId:'', text:'' })
+  }
+
+  // Load/save overall player analysis (Player.notes)
+  useEffect(()=>{
+    (async()=>{
+      setOverallNote('')
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: getPlayerQuery, variables: { id: playerId } }) })
+        const j:any = await res.json(); const p = j?.data?.getPlayer
+        setOverallNote(p?.notes || '')
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
+
+  async function saveOverall(){
+    if(!props.apiUrl || !props.getToken || !playerId) return
+    setOverallSaving(true)
+    try{
+      const token = await props.getToken(); if(!token) return
+      const input:any = { id: playerId, notes: (overallNote||'').trim() }
+      await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updatePlayerMut, variables: { input } }) })
+    }catch{}
+    finally{ setOverallSaving(false) }
+  }
+  // Fetch qualitative notes for selected player
+  useEffect(()=>{
+    (async()=>{
+      setNotes([])
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
 
   const stat = useMemo(()=>{
     if(!playerId) return null
@@ -279,25 +375,111 @@ export default function Dashboard(props:{
                   <TableCell as="th">{t('dashboard.draws')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+                  <TableCell as="th">💬</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stat.vsTop.map(([oppId, v])=> (
-                  <TableRow key={oppId}>
-                    <TableCell>{players[oppId] ?? oppId}</TableCell>
-                    <TableCell>{v.bouts}</TableCell>
-                    <TableCell>{v.wins}</TableCell>
-                    <TableCell>{v.losses}</TableCell>
-                    <TableCell>{v.draws}</TableCell>
-                    <TableCell>{v.pf}</TableCell>
-                    <TableCell>{v.pa}</TableCell>
-                  </TableRow>
-                ))}
+                {stat.vsTop.map(([oppId, v])=> {
+                  // count notes for this opponent across matches for selected player
+                  let c = 0
+                  for(const n of notes){
+                    const m = matches.find(mm=> mm.id===n.matchId)
+                    if(!m) continue
+                    for(const b of (m.bouts?.items ?? [])){
+                      const isLeft = b.ourPlayerId===playerId
+                      const isRight = b.opponentPlayerId===playerId
+                      if(!isLeft && !isRight) continue
+                      const thisOpp = isLeft ? b.opponentPlayerId : b.ourPlayerId
+                      if(thisOpp===oppId){ c++; break }
+                    }
+                  }
+                  return (
+                    <TableRow key={oppId}>
+                      <TableCell>{players[oppId] ?? oppId}</TableCell>
+                      <TableCell>{v.bouts}</TableCell>
+                      <TableCell>{v.wins}</TableCell>
+                      <TableCell>{v.losses}</TableCell>
+                      <TableCell>{v.draws}</TableCell>
+                      <TableCell>{v.pf}</TableCell>
+                      <TableCell>{v.pa}</TableCell>
+                      <TableCell>{c>0 ? `💬 ${c}` : ''}</TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
             </View>
           </View>
+          {/* Player overall analysis (per player, not per match) */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('analysis.overallTitle')||'選手全体分析'}</Heading>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:8, marginTop:8 }}>
+              <textarea rows={4} value={overallNote} onChange={(e)=> setOverallNote(e.target.value)} placeholder={t('analysis.overallPh')||'選手全体の所感・課題・方針など'} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+              <div className="no-print" style={{ display:'flex', justifyContent:'flex-end' }}>
+                <Button size="small" onClick={saveOverall} isLoading={overallSaving} isDisabled={!playerId}>{t('actions.save')||'保存'}</Button>
+              </div>
+            </div>
+          </View>
+
+          {/* Player qualitative analysis (per match) */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+            <div className="no-print" style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
+              <Button size="small" onClick={openAddNote} isDisabled={!playerId || playerMatches().length===0}>{t('analysis.add')||'コメント追加'}</Button>
+            </div>
+            {notes.length===0 ? (
+              <div className="muted" style={{ fontSize:12 }}>{t('analysis.noNotes')||'コメントはありません'}</div>
+            ) : (
+              <View className="table-wrap">
+                <Table variation="bordered" highlightOnHover>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell as="th">{t('labels.match')||'試合/日付'}</TableCell>
+                      <TableCell as="th">{t('analysis.comment')||'コメント'}</TableCell>
+                      <TableCell as="th"></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {notes.map((n,i)=>{
+                      const m = matches.find(mm=> mm.id===n.matchId)
+                      const title = m ? `${(m as any).heldOn||''} ${(m as any).tournament||''}` : n.matchId
+                      return (
+                        <TableRow key={n.matchId+String(i)}>
+                          <TableCell>{title}</TableCell>
+                          <TableCell>{n.comment}</TableCell>
+                          <TableCell><Button size="small" variation="link" onClick={()=> openEditNote(n.matchId, n.comment)}>{t('analysis.edit')||'編集'}</Button></TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </View>
+            )}
+          </View>
         </View>
+      )}
+      {noteModal.open && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNoteModal({ open:false, matchId:'', text:'' })}>
+          <div style={{ background:'#fff', minWidth:360, maxWidth:720, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+            <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+            <div style={{ display:'grid', gap:8, marginTop:12 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'center' }}>
+                <div style={{ fontSize:13 }}>{t('labels.match')||'試合/日付'}</div>
+                <select value={noteModal.matchId} onChange={(e)=> setNoteModal(m=> ({ ...m, matchId: e.target.value }))} style={{ padding:'6px 8px', fontSize:13 }}>
+                  {playerMatches().map(m=> (<option key={m.id} value={m.id}>{(m as any).heldOn||''} {(m as any).tournament||''}</option>))}
+                </select>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'start' }}>
+                <div style={{ fontSize:13 }}>{t('analysis.comment')||'コメント'}</div>
+                <textarea rows={4} value={noteModal.text} onChange={(e)=> setNoteModal(m=> ({ ...m, text: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+              <Button variation="link" onClick={()=> setNoteModal({ open:false, matchId:'', text:'' })}>{t('action.cancel')||'キャンセル'}</Button>
+              <Button variation="primary" onClick={saveNote} isDisabled={!noteModal.matchId || !playerId}>{t('actions.save')||'保存'}</Button>
+            </div>
+          </div>
+        </div>
       )}
     </View>
   )
@@ -372,6 +554,7 @@ function TimeInBoutHistogram(props:{ binsFor:number[]; binsAgainst:number[]; bin
     </div>
   )
 }
+
 
 
 

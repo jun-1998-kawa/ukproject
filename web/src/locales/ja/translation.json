@@ -280,5 +280,16 @@
                    "title":  "大会ごとのYouTube再生リスト",
                    "help":  "URLまたはプレイリストID（list=...）を入力してください。空にすると未設定になります。",
                    "noTournaments":  "大会名がありません"
+               },
+    "analysis":  {
+                   "overallTitle":  "選手全体分析",
+                   "overallPh":  "全体所感・強み・課題・方針など",
+                   "playerNotes":  "選手分析",
+                   "comment":  "コメント",
+                   "noNotes":  "コメントはありません",
+                   "add":  "コメント追加",
+                   "edit":  "編集"
                }
 }
+
+

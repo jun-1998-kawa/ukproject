@@ -18,6 +18,8 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
   // YouTube playlists per tournament
   const [ytMap, setYtMap] = useState<Record<string,string>>(props.tournamentPlaylists || {})
   const [ytOpen, setYtOpen] = useState(false)
+  const [noteCountByMatch, setNoteCountByMatch] = useState<Record<string,number>>({})
+  const [noteCountByOpponent, setNoteCountByOpponent] = useState<Record<string,number>>({})
 
   useEffect(()=>{ if(!teamId && homeUniversityId) setTeamId(homeUniversityId) }, [homeUniversityId])
 
@@ -70,6 +72,42 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
     }
     setYtOpen(false)
   }
+
+  // Fetch PlayerNote counts for matches involving selected team
+  useEffect(()=>{
+    (async()=>{
+      setNoteCountByMatch({}); setNoteCountByOpponent({})
+      if(!props.apiUrl || !props.getToken || !teamId) return
+      const filtered = matches.filter(m=>{
+        if(from && m.heldOn < from) return false
+        if(to && m.heldOn > to) return false
+        if(officialFilter==='intra' && (!homeUniversityId || m.ourUniversityId!==homeUniversityId || m.opponentUniversityId!==homeUniversityId)) return false
+        if(tournamentFilter && m.tournament && !m.tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+        if(tournamentFilter && !m.tournament) return false
+        return (m.ourUniversityId===teamId || m.opponentUniversityId===teamId)
+      })
+      try{
+        const token = await props.getToken(); if(!token) return
+        const byMatch: Record<string,number> = {}
+        for(const m of filtered){
+          const q = `query ListPlayerNotesByMatch($matchId: ID!, $limit:Int){ listPlayerNotesByMatch(matchId:$matchId, limit:$limit){ items{ playerId } } }`
+          try{
+            const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { matchId: m.id, limit: 500 } }) })
+            const j:any = await res.json(); const cnt = (j?.data?.listPlayerNotesByMatch?.items||[]).length||0
+            byMatch[m.id] = cnt
+          }catch{}
+        }
+        setNoteCountByMatch(byMatch)
+        const byOpp: Record<string,number> = {}
+        for(const m of filtered){
+          const opp = m.ourUniversityId===teamId ? (m.opponentUniversityId||'') : (m.ourUniversityId||'')
+          if(!opp) continue
+          byOpp[opp] = (byOpp[opp]||0) + (byMatch[m.id]||0)
+        }
+        setNoteCountByOpponent(byOpp)
+      }catch{}
+    })()
+  }, [matches, teamId, from, to, tournamentFilter, officialFilter, homeUniversityId, props.apiUrl, props.getToken])
 
   function buildTechniqueKey(target?:string, methods?:string[]){ const mm = (methods||[]).slice().sort(); return `${target||''}:${mm.join('+')}` }
   function labelTarget(code:string){ return labelJa.target[code] ?? code }
@@ -182,13 +220,20 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
   }, [matches, teamId])
 
   // Export helpers
-  function downloadCSV(filename:string, rows: (string|number)[][]){
-    const csv = rows.map(r=> r.map(x=> typeof x==='string' && (x.includes(',')||x.includes('"')||x.includes('\n')) ? '"'+x.replace(/"/g,'""')+'"' : String(x)).join(',')).join('\n')
+    function downloadCSV(filename:string, rows: (string|number)[][]){
+    const csv = rows
+      .map(r => r
+        .map(x => {
+          const s = String(x)
+          return (s.includes(',') || s.includes('"') || s.includes('\r\n')) ? '"'+s.replace(/"/g,'""')+'"' : s
+        })
+        .join(',')
+      )
+      .join('\r\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url)
-  }
-  function exportPlayers(){
+  }function exportPlayers(){
     const header = [t('dashboard.player')||'Player', t('dashboard.pointsFor')||'PF', t('dashboard.pointsAgainst')||'PA']
     const rows = playerContrib.map(p=> [p.name, p.pf, p.pa])
     downloadCSV('team_players.csv', [header, ...rows])
@@ -299,6 +344,7 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
                   <TableCell as="th">{t('dashboard.draws')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+                  <TableCell as="th">💬</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -311,6 +357,7 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
                     <TableCell>{v.draws}</TableCell>
                     <TableCell>{v.pf}</TableCell>
                     <TableCell>{v.pa}</TableCell>
+                    <TableCell>{(noteCountByOpponent[oppId]||0)>0 ? `💬 ${(noteCountByOpponent[oppId]||0)}` : ''}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -341,6 +388,7 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
                         <a href={ytMap[r.tournament]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>▶</a>
                       )}
                     </TableCell>
+
                     <TableCell>{r.teamWins}</TableCell>
                     <TableCell>{r.oppWins}</TableCell>
                     <TableCell>{r.draws}</TableCell>
@@ -442,6 +490,14 @@ export default function TeamDashboard(props:{ matches: Match[]; universities: Re
     </View>
   )
 }
+
+
+
+
+
+
+
+
 
 
 

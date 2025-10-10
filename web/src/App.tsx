@@ -337,6 +337,8 @@ export default function App() {
                   labelJa={labelJa}
                   masters={{ targets: masters.targets as any, methods: masters.methods as any }}
                   homeUniversityId={homeUniversityId}
+                  apiUrl={apiUrl}
+                  getToken={getToken}
                 />
               ) : (
                 <TeamDashboard

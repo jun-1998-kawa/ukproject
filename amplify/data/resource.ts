@@ -280,6 +280,23 @@ const schema = a.schema({
     allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
     allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
   ]),
+
+  // Qualitative notes per player per match
+  PlayerNote: a.model({
+    playerId: a.id().required(),
+    matchId: a.id().required(),
+    comment: a.string().required(),
+    authorUserId: a.string(),
+  })
+  .identifier(["playerId","matchId"]) // one note per player per match (upsert)
+  .secondaryIndexes((idx)=>[
+    idx("playerId").sortKeys(["matchId"]).queryField("listPlayerNotesByPlayer"),
+    idx("matchId").sortKeys(["playerId"]).queryField("listPlayerNotesByMatch"),
+  ])
+  .authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
+    allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
+  ]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

@@ -1,0 +1,23 @@
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(matchStats?.rows||[]).map(r=> (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      {r.tournament}
+                      {r.tournament && ytMap[r.tournament] && (
+                        <a href={ytMap[r.tournament]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>
+                      )}
+                    </TableCell>
+
+                    <TableCell>{r.teamWins}</TableCell>
+                    <TableCell>{r.oppWins}</TableCell>
+                    <TableCell>{r.draws}</TableCell>
+                    <TableCell>{r.result}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
