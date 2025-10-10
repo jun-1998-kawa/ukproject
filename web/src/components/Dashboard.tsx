@@ -183,7 +183,6 @@ export default function Dashboard(props:{
             pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
             const key = buildTechniqueKey(p.target||'', p.methods||[])
-              combinedAgainst[key] = (combinedAgainst[key]||0)+1
             combinedFor[key] = (combinedFor[key]||0)+1
             if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
             if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
