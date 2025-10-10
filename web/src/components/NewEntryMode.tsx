@@ -531,7 +531,7 @@ export default function NewEntryMode(props: {
           </TableRow>
         </TableHead>
         <TableBody>
-          {boutsLocal.map((b)=>{
+          {boutsLocal.slice().sort((a,b)=> String(a.id).localeCompare(String(b.id))).map((b)=>{
             const s = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 }
             const rowValid = [s.left1, s.left2, s.right1, s.right2].every(ipponValidOrEmpty)
             const hasData = rowHasData(s)
@@ -683,6 +683,7 @@ export default function NewEntryMode(props: {
     </>
   )
 }
+
 
 
 

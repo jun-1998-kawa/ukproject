@@ -1,0 +1,118 @@
+                  <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                  <Button size="small" onClick={()=> saveRow(b)} isDisabled={!rowValid || savingId===b.id} isLoading={savingId===b.id}>{t('actions.save')}</Button>
+                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'bout', targetId: b.id, bout: b })}>{t('actions.delete')}</Button>
+                    {!autoResult && (
+                      <>
+                        <select value={(resultEdit[b.id]?.winType)|| (b.winType ?? '')} onChange={(e)=> setResultEdit(x=> ({...x, [b.id]: { winType: e.target.value, winner: (resultEdit[b.id]?.winner ?? (b.winnerPlayerId? (b.winnerPlayerId===b.ourPlayerId?'our':'opponent') : '') ) as any }}))} style={{ fontSize:12 }}>
+                          <option value="">-</option>
+                          <option value="IPPON">{t('winType.IPPON')}</option>
+                          <option value="NIHON">{t('winType.NIHON')}</option>
+                          <option value="ENCHO">{t('winType.ENCHO')}</option>
+                          <option value="HANTEI">{t('winType.HANTEI')}</option>
+                          <option value="HANSOKU">{t('winType.HANSOKU')}</option>
+                          <option value="DRAW">{t('winType.DRAW')}</option>
+                        </select>
+                        {(resultEdit[b.id]?.winType ?? b.winType) !== 'DRAW' && (
+                          <select value={(resultEdit[b.id]?.winner) || (b.winnerPlayerId? (b.winnerPlayerId===b.ourPlayerId?'our':'opponent'): '')} onChange={(e)=> setResultEdit(x=> ({...x, [b.id]: { winType: (resultEdit[b.id]?.winType ?? (b.winType || '')) as any, winner: e.target.value as any }}))} style={{ fontSize:12 }}>
+                            <option value="">-</option>
+                            <option value="our">{t('team.our')}</option>
+                            <option value="opponent">{t('team.opponent')}</option>
+                          </select>
+                        )}
+                        <Button size="small" onClick={()=> setBoutResult(b)} isDisabled={!resultEdit[b.id]?.winType && !b.winType}>{t('resultEditor.set')}</Button>
+                      </>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </View>
+    {ytOpen && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setYtOpen(false)}>
+        <div style={{ background:'#fff', minWidth:360, maxWidth:720, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <Heading level={5}>{t('youtube.title')||'大会ごとのYouTube再生リスト'}</Heading>
+          <div style={{ fontSize:12, color:'#555', marginTop:4 }}>{t('youtube.help')||'URLまたはプレイリストID（list=...）を入力してください。空にすると未設定になります。'}</div>
+          <div style={{ display:'grid', gap:8, marginTop:12 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'center' }}>
+              <div style={{ fontSize:13 }}>{tournament || '-'}</div>
+              <input value={ytUrl} onChange={e=> setYtUrl(e.target.value)} placeholder="https://www.youtube.com/playlist?list=..." style={{ width:'100%', padding:'6px 8px', fontSize:13 }} />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+            <Button variation="link" onClick={()=> setYtOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
+            <Button variation="primary" onClick={saveYtForTournament}>{t('actions.save')||'保存'}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    {noteOpen && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNoteOpen(false)}>
+        <div style={{ background:'#fff', minWidth:360, maxWidth:820, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <Heading level={5}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+          {notesLoading ? (
+            <div className="muted" style={{ padding:'12px 0' }}>{t('loading')||'Loading...'}</div>
+          ) : (
+            <div style={{ display:'grid', gap:8, marginTop:8, maxHeight:'60vh', overflow:'auto' }}>
+              {uniquePlayersInMatch().map(pid=> (
+                <div key={pid} style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'start' }}>
+                  <div style={{ fontSize:13 }}>{players[pid] || pid}</div>
+                  <textarea value={notes[pid]||''} onChange={e=> setNotes(m=> ({...m, [pid]: e.target.value }))} rows={3} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+            <Button variation="link" onClick={()=> setNoteOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
+            <Button variation="primary" onClick={saveNotes} isDisabled={!matchId}>{t('actions.save')||'保存'}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    {delModal?.open && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setDelModal(null)}>
+        <div style={{ background:'#fff', minWidth:320, maxWidth:520, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <h4 style={{ marginTop:0 }}>{delModal.kind==='bout' ? t('confirm.deleteBoutTitle') : t('confirm.deleteMatchTitle')}</h4>
+          <div style={{ color:'#444', marginBottom:12 }}>
+            {delModal.kind==='bout' && (<>
+              <div>{t('confirm.deleteBoutBody')}</div>
+              <div style={{ fontSize:12, color:'#666' }}>{t('confirm.deleteBoutNote')}</div>
+            </>)}
+            {delModal.kind==='match' && (<>
+              <div>{t('confirm.deleteMatchBody')}</div>
+              <div style={{ fontSize:12, color:'#666' }}>{t('confirm.deleteMatchNote')}</div>
+            </>)}
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+            <Button onClick={()=> setDelModal(null)} variation="link">{t('action.cancel')||'Cancel'}</Button>
+            <Button variation="warning" onClick={async()=>{
+              try{
+                if(delModal.kind==='bout' && delModal.bout){ await deleteBoutDeep(delModal.bout) }
+                if(delModal.kind==='match'){ await deleteMatchDeep(delModal.targetId) }
+                if(delModal.kind==='bout' && delModal.bout){ setBoutsLocal(prev=> prev.filter(x=> x.id!==delModal.bout!.id)); setRows(prev=> { const cp={...prev}; delete cp[delModal.bout!.id]; return cp }) }
+                if(delModal.kind==='match'){ setBoutsLocal([]); setRows({}) }
+                setDelModal(null); await onSaved()
+              }catch(e){ alert(String(e)) }
+            }}>{t('action.delete')||'Delete'}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
+  )
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -131,6 +131,7 @@ const schema = a.schema({
   Bout: a.model({
     matchId: a.id().required(),
     match: a.belongsTo("Match","matchId"),
+    seq: a.integer(),
     ourPlayerId: a.id().required(),
     ourPlayer: a.belongsTo("Player","ourPlayerId"),
     opponentPlayerId: a.id().required(),

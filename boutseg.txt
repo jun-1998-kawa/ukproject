@@ -1,0 +1,45 @@
+    allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
+    allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
+  ]),
+
+  Bout: a.model({
+    matchId: a.id().required(),
+    match: a.belongsTo("Match","matchId"),
+    ourPlayerId: a.id().required(),
+    ourPlayer: a.belongsTo("Player","ourPlayerId"),
+    opponentPlayerId: a.id().required(),
+    opponentPlayer: a.belongsTo("Player","opponentPlayerId"),
+    ourPosition: a.string(),
+    ourStance: a.string(),
+    opponentStance: a.string(),
+    startAt: a.datetime(),
+    endAt: a.datetime(),
+    winnerPlayerId: a.id(),
+    winnerPlayer: a.belongsTo("Player","winnerPlayerId"),
+    winType: a.string(),
+    points: a.hasMany("Point","boutId"),
+    exchanges: a.hasMany("Exchange","boutId"),
+    actions: a.hasMany("Action","boutId"),
+  }).secondaryIndexes((idx)=>[
+    idx("matchId").queryField("listBoutsByMatch"),
+    idx("ourPlayerId").queryField("listBoutsByOurPlayer"),
+    idx("opponentPlayerId").queryField("listBoutsByOpponentPlayer"),
+  ]).authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
+    allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
+  ]),
+
+  Point: a.model({
+    boutId: a.id().required(),
+    bout: a.belongsTo("Bout","boutId"),
+    tSec: a.integer().required(),
+    scorerPlayerId: a.id().required(),
+    scorer: a.belongsTo("Player","scorerPlayerId"),
+    opponentPlayerId: a.id().required(),
+    opponent: a.belongsTo("Player","opponentPlayerId"),
+
+    // Optional for foul-only ippon
+    target: a.string(),
+    methods: a.string().array(),
+    sequenceLen: a.integer(),
+    sequenceTargets: a.string().array(),
