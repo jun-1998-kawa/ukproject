@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge, Heading } from '@aws-amplify/ui-react'
 import { methodAllowedForTargetJaLabel } from '../lib/tech'
+import Typeahead, { TypeaheadItem } from './Typeahead'
 
 type Master = { code: string; nameJa?: string; nameEn?: string }
 type Bout = {
@@ -20,9 +21,9 @@ type Bout = {
 }
 type PointInput = { tSec: number | ''; target: string; methods: string[] }
 type University = { id: string; name: string; shortName?: string|null }
-type PlayerEx = { id: string; name: string; universityId?: string|null }
+type PlayerEx = { id: string; name: string; nameKana?: string|null; universityId?: string|null; gender?: 'MEN'|'WOMEN'|null; enrollYear?: number|null; grade?: number|null }
 
-function IpponCell(props: {
+  function IpponCell(props: {
   value: PointInput | null
   onChange: (next: PointInput | null) => void
   targets: Master[]
@@ -92,6 +93,8 @@ function IpponCell(props: {
                   onFocus?.();
                   if(e.target.checked) onChange({ ...v, methods: [...v.methods, m.code] })
                   else onChange({ ...v, methods: v.methods.filter(x=> x!==m.code) })
+                  // Close the method picker immediately after a click for faster entry
+                  setOpen(false)
                 }} />
                 <span>{i18n.language.startsWith('ja') ? (m.nameJa ?? m.nameEn ?? m.code) : (m.nameEn ?? m.code)}</span>
               </label>
@@ -136,6 +139,7 @@ export default function NewEntryMode(props: {
   const [newLeft, setNewLeft] = useState<string>('')
   const [newRight, setNewRight] = useState<string>('')
   const [playerFilter, setPlayerFilter] = useState('')
+  const [playerGenderFilter, setPlayerGenderFilter] = useState<'ALL'|'MEN'|'WOMEN'>('ALL')
   const [universities, setUniversities] = useState<University[]>([])
   const [playersEx, setPlayersEx] = useState<PlayerEx[]>([])
   const [ourUniversityId, setOurUniversityId] = useState<string>('')
@@ -303,8 +307,8 @@ export default function NewEntryMode(props: {
       let ntU: string | null = null; const accU: University[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
       setUniversities(accU)
-      // players with universityId
-      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId } nextToken } }`
+      // players with universityId and gender
+      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId gender enrollYear grade } nextToken } }`
       let ntP: string | null = null; const accP: PlayerEx[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
       setPlayersEx(accP)
@@ -493,13 +497,21 @@ export default function NewEntryMode(props: {
     const newId = j2.data.createBout.id as string; setFocusBoutId(newId); setNewLeft(''); setNewRight(''); await onSaved()
   }
 
-  function buildPlayerOptionsEx(list: PlayerEx[], unis: University[], filter: string){
-    const f = filter.trim().toLowerCase(); const grouped: Record<string, PlayerEx[]> = {}
-    for(const p of list){ if(f && !p.name.toLowerCase().includes(f)) continue; const key = p.universityId ?? 'unknown'; (grouped[key]??=[]).push(p) }
-    const order = Object.keys(grouped).sort((a,b)=> (a==='unknown'?'ZZZ':a).localeCompare(b==='unknown'?'ZZZ':b))
-    const opts:any[]=[]; for(const key of order){ const label = key==='unknown' ? t('labels.universityUnknown') : (unis.find(u=> u.id===key)?.name ?? key); const children = grouped[key].sort((a,b)=> a.name.localeCompare(b.name,'ja')).map(p=> (<option key={p.id} value={p.id}>{p.name}</option>)); opts.push(<optgroup key={key} label={label}>{children}</optgroup>) }
-    return opts
+  function gradeLabel(p: PlayerEx){
+    if(typeof p.grade==='number' && p.grade>0 && p.grade<10) return `${p.grade}年`
+    return ''
   }
+  const typeaheadItems: TypeaheadItem[] = (playersEx||[])
+    .filter(p=> (playerGenderFilter==='ALL') || ((p.gender||null)===playerGenderFilter))
+    .map(p=> {
+      const uni = universities.find(u=> u.id===p.universityId)
+      const uniLabel = uni?.shortName || uni?.name || ''
+      const gl = gradeLabel(p)
+      const label = [p.name, uniLabel, gl].filter(Boolean).join(' ')
+      const searchKey = [p.name, p.nameKana||'', uniLabel, gl].join(' ')
+      return { id: p.id, label, searchKey }
+    })
+    .sort((a,b)=> a.label.localeCompare(b.label,'ja'))
 
   function ipponValidOrEmpty(v: PointInput | null){ if(!v) return true; const empty = (!v.target && v.methods.length===0 && (v.tSec==='' || v.tSec===undefined)); if(empty) return true; const valid = (v.methods.length>0) && !!v.target && ((typeof v.tSec==='number' && v.tSec>=0) || v.tSec===''); return valid }
   function ipponIsValid(v: PointInput | null){ return !!(v && v.methods.length>0 && !!v.target) }
@@ -538,6 +550,11 @@ export default function NewEntryMode(props: {
       </View>
       <View marginBottom="0.25rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
         <TextField label={t('labels.searchPlayer')} placeholder={t('placeholders.nameFilter')} value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
+        <SelectField label={t('admin.players.gender')||'性別'} value={playerGenderFilter} onChange={e=> setPlayerGenderFilter(e.target.value as any)} size="small" width={dense?"8rem":"10rem"}>
+          <option value="ALL">{t('filters.all')||'すべて'}</option>
+          <option value="MEN">{t('gender.MEN')||'男子'}</option>
+          <option value="WOMEN">{t('gender.WOMEN')||'女子'}</option>
+        </SelectField>
         <div style={{ display:'flex', alignItems:'flex-end', gap:8 }}>
           <TextField label={t('admin.players.newName') || '選手名'} value={quickPlayerName} onChange={e=> setQuickPlayerName(e.target.value)} width={dense?"12rem":"16rem"} />
           <SelectField label={t('admin.players.universityReq') || '大学'} value={quickPlayerUniversityId || (opponentUniversityId || ourUniversityId)} onChange={e=> setQuickPlayerUniversityId(e.target.value)} width={dense?"12rem":"14rem"}>
@@ -570,28 +587,28 @@ export default function NewEntryMode(props: {
         <TableHead>
           <TableRow>
             <TableCell as="th" width="16%">{t('columns.leftPlayer')}</TableCell>
-            <TableCell as="th" width="16%">A {t('columns.first')}</TableCell>
-            <TableCell as="th" width="16%">A {t('columns.second')}</TableCell>
-            <TableCell as="th" width="16%">B {t('columns.first')}</TableCell>
-            <TableCell as="th" width="16%">B {t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.first')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.first')}</TableCell>
             <TableCell as="th" width="16%">{t('columns.rightPlayer')}</TableCell>
             <TableCell as="th" width="8%">{t('columns.actions')}</TableCell>
           </TableRow>
           <TableRow>
             <TableCell>
-              <select value={newLeft} onChange={e=> setNewLeft(e.target.value)} style={{ width:'100%' }}>
-                <option value="">{t('placeholders.selectLeft')}</option>
-                {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
-              </select>
+              <div>
+                <label style={{ fontSize:12, color:'#444' }}>{t('placeholders.selectLeft')}</label>
+                <Typeahead value={newLeft} onChange={setNewLeft} items={typeaheadItems} width={dense? '14rem':'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
+              </div>
             </TableCell>
             <TableCell colSpan={3}>
               <div style={{ color:'#666', fontSize:12 }}>{t('hints.addNewMatch')}</div>
             </TableCell>
             <TableCell>
-              <select value={newRight} onChange={e=> setNewRight(e.target.value)} style={{ width:'100%' }}>
-                <option value="">{t('placeholders.selectRight')}</option>
-                {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
-              </select>
+              <div>
+                <label style={{ fontSize:12, color:'#444' }}>{t('placeholders.selectRight')}</label>
+                <Typeahead value={newRight} onChange={setNewRight} items={typeaheadItems} width={dense? '14rem':'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
+              </div>
             </TableCell>
             <TableCell>
               <Button size="small" onClick={addNewBout} isDisabled={!newLeft || !newRight}>{t('actions.add')}</Button>
@@ -625,10 +642,10 @@ export default function NewEntryMode(props: {
                     <IpponCell value={s.left2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
+                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
+                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>

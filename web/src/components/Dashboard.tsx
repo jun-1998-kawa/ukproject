@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import Typeahead, { TypeaheadItem } from './Typeahead'
 
 // Shared color palette for charts/legend
 const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
@@ -35,7 +36,45 @@ export default function Dashboard(props:{
   const [overallNote, setOverallNote] = useState<string>('')
   const [overallSaving, setOverallSaving] = useState<boolean>(false)
 
-  const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
+  // Optional rich player list for better labels
+  type PlayerLite = { id:string; name:string; nameKana?:string|null; universityId?:string|null; grade?:number|null }
+  type University = { id:string; name:string; shortName?:string|null }
+  const [playersLite, setPlayersLite] = useState<PlayerLite[]|null>(null)
+  const [universities, setUniversities] = useState<University[]|null>(null)
+  useEffect(()=>{
+    (async()=>{
+      try{
+        if(!props.apiUrl || !props.getToken) return
+        const token = await props.getToken(); if(!token) return
+        // universities
+        const qU = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+        let ntU: string | null = null; const accU: University[] = []
+        do{ const r = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); accU.push(...(j?.data?.listUniversities?.items||[])); ntU=j?.data?.listUniversities?.nextToken||null } while(ntU)
+        setUniversities(accU)
+        // players
+        const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId grade } nextToken } }`
+        let ntP: string | null = null; const accP: PlayerLite[] = []
+        do{ const r = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); accP.push(...(j?.data?.listPlayers?.items||[])); ntP=j?.data?.listPlayers?.nextToken||null } while(ntP)
+        setPlayersLite(accP)
+      }catch{}
+    })()
+  }, [props.apiUrl, props.getToken])
+
+  function gradeLabel(g?: number|null){ return (typeof g==='number' && g>0 && g<10) ? `${g}年` : '' }
+  const typeaheadItems: TypeaheadItem[] = useMemo(()=>{
+    if(playersLite && universities){
+      return playersLite.map(p=>{
+        const uni = universities.find(u=> u.id===p.universityId)
+        const uniLabel = uni?.shortName || uni?.name || ''
+        const gl = gradeLabel(p.grade)
+        const label = [p.name, uniLabel, gl].filter(Boolean).join(' ')
+        const searchKey = [p.name, p.nameKana||'', uniLabel, gl].join(' ')
+        return { id: p.id, label, searchKey }
+      }).sort((a,b)=> a.label.localeCompare(b.label,'ja'))
+    }
+    // Fallback to simple map
+    return Object.entries(players).map(([id,name])=> ({ id, label: name })).sort((a,b)=> a.label.localeCompare(b.label,'ja'))
+  }, [playersLite, universities, players])
 
   // Persist filter in localStorage (share same key with App to keep consistent)
   useEffect(()=>{
@@ -238,10 +277,10 @@ export default function Dashboard(props:{
       <Heading level={4}>{t('dashboard.title')}</Heading>
       <View marginTop="0.5rem">
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
-          <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="18rem">
-            <option value="">--</option>
-            {playerList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
-          </SelectField>
+          <div>
+            <label style={{ fontSize:12, color:'#444' }}>{t('dashboard.selectPlayer')}</label>
+            <Typeahead value={playerId} onChange={setPlayerId} items={typeaheadItems} width={'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
+          </div>
           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
           <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">

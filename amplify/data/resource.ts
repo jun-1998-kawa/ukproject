@@ -36,6 +36,8 @@ const schema = a.schema({
     university: a.belongsTo("University","universityId"),
     name: a.string().required(),
     nameKana: a.string(),
+    // Gender category for competition: MEN(男子) / WOMEN(女子)
+    gender: a.enum(["MEN","WOMEN"]),
     grade: a.integer(),
     enrollYear: a.integer(),
     gradeOverride: a.integer(),
@@ -56,6 +58,7 @@ const schema = a.schema({
     idx("universityId").queryField("listPlayersByUniversity"),
     idx("name").queryField("listPlayersByName"),
     idx("studentNo").queryField("getPlayerByStudentNo"),
+    idx("gender").queryField("listPlayersByGender"),
   ]).authorization((allow)=>[
     allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
     allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
