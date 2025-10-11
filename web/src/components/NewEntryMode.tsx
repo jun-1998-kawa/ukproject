@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge, Heading } from '@aws-amplify/ui-react'
 import { methodAllowedForTargetJaLabel } from '../lib/tech'
@@ -173,9 +174,13 @@ export default function NewEntryMode(props: {
   const [ytUrl, setYtUrl] = useState<string>('')
   // Player qualitative notes
   const [noteOpen, setNoteOpen] = useState(false)
+  // Keyed by `${boutId}:${playerId}` to keep comments per-bout per-player
   const [notes, setNotes] = useState<Record<string,string>>({})
   const [notesLoading, setNotesLoading] = useState(false)
 
+  // Quick add player states
+  const [quickPlayerName, setQuickPlayerName] = useState('')
+  const [quickPlayerUniversityId, setQuickPlayerUniversityId] = useState<string>('')
   useEffect(()=>{
     const init: Record<string, RowState> = {}
     for(const b of bouts){ init[b.id] = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 } }
@@ -234,9 +239,10 @@ export default function NewEntryMode(props: {
     }
   }
 
-  const listNotesByMatch = `query ListPlayerNotesByMatch($matchId: ID!, $limit:Int){ listPlayerNotesByMatch(matchId:$matchId, limit:$limit){ items{ playerId matchId comment } } }`
-  const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
-  const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
+  // New per-bout note schema
+  const listNotesByBout = `query ListPlayerNotesByBout($boutId: ID!, $limit:Int){ listPlayerNotesByBout(boutId:$boutId, limit:$limit){ items{ playerId boutId matchId comment } } }`
+  const updateBoutNoteMut = `mutation UpdatePlayerBoutNote($input: UpdatePlayerBoutNoteInput!){ updatePlayerBoutNote(input:$input){ playerId boutId } }`
+  const createBoutNoteMut = `mutation CreatePlayerBoutNote($input: CreatePlayerBoutNoteInput!){ createPlayerBoutNote(input:$input){ playerId boutId } }`
 
   function sortedBouts(){
     return boutsLocal.slice().sort((a:any,b:any)=>{
@@ -256,9 +262,15 @@ export default function NewEntryMode(props: {
     setNotesLoading(true)
     try{
       const token = await getToken(); if(!token) return
-      const res: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: listNotesByMatch, variables: { matchId, limit: 500 } }) })
-      const j: any = await res.json(); const arr = (j?.data?.listPlayerNotesByMatch?.items ?? []) as any[]
-      const map: Record<string,string> = {}; for(const it of arr){ map[it.playerId] = it.comment }
+      const map: Record<string,string> = {}
+      for(const b of sortedBouts()){
+        try{
+          const res: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: listNotesByBout, variables: { boutId: b.id, limit: 200 } }) })
+          const j: any = await res.json();
+          const arr = (j?.data?.listPlayerNotesByBout?.items ?? []) as any[]
+          for(const it of arr){ map[`${it.boutId}:${it.playerId}`] = it.comment || '' }
+        }catch{}
+      }
       setNotes(map)
     }catch{}
     finally{ setNotesLoading(false) }
@@ -267,15 +279,14 @@ export default function NewEntryMode(props: {
     if(!matchId) { setNoteOpen(false); return }
     try{
       const token = await getToken(); if(!token) return
-      const seen = new Set<string>()
       for(const b of sortedBouts()){
         for(const pid of [b.ourPlayerId, b.opponentPlayerId]){
-          if(seen.has(pid)) continue; seen.add(pid)
-          const comment = (notes[pid]||'').trim()
+          const key = `${b.id}:${pid}`
+          const comment = (notes[key]||'').trim()
           if(comment){
-            const input: any = { playerId: pid, matchId, comment }
-            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
-            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+            const input: any = { playerId: pid, boutId: b.id, matchId, comment }
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateBoutNoteMut, variables: { input } }) }) }catch{}
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createBoutNoteMut, variables: { input } }) }) }catch{}
           }
         }
       }
@@ -338,6 +349,31 @@ export default function NewEntryMode(props: {
   const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
   const createMatchMutation = `mutation CreateMatch($input: CreateMatchInput!) { createMatch(input:$input){ id heldOn tournament isOfficial ourUniversityId opponentUniversityId } }`
   const createBoutMutation = `mutation CreateBout($input: CreateBoutInput!) { createBout(input:$input){ id ourPlayerId opponentPlayerId } }`
+
+  // Merge provided players map with fetched playersEx for reliable name resolution
+  const nameById = useMemo(()=>{
+    const m = { ...players };
+    for(const p of playersEx){ if(p.id && p.name && !m[p.id]) m[p.id] = p.name }
+    return m;
+  }, [players, playersEx]);
+
+  // Quick add minimal player (name + university)
+  async function quickAddPlayer(){
+    const name = quickPlayerName.trim();
+    const uniId = (quickPlayerUniversityId || opponentUniversityId || ourUniversityId || '').trim();
+    if(!name || !uniId){ alert(t('alerts.nameAndUniversityRequired') || '選手名と大学を選んでください'); return }
+    try{
+      const token = await getToken(); if(!token) return;
+      const q = "mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name universityId } }";
+      const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { input: { name, universityId: uniId } } }) });
+      const j = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+      const created = j.data.createPlayer;
+      setPlayersEx(list => [...list, created]);
+      setQuickPlayerName('');
+      if(!quickPlayerUniversityId) setQuickPlayerUniversityId(uniId);
+      setOpMsg(t('messages.playerCreated') || '選手を作成しました');
+    } catch(e:any){ setRefError(String(e?.message ?? e)) }
+  }
   const updateBoutMutation = `mutation UpdateBout($input: UpdateBoutInput!) { updateBout(input:$input){ id winType winnerPlayerId } }`
   const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input){ id } }`
   const deleteBoutMutation = `mutation DeleteBout($input: DeleteBoutInput!) { deleteBout(input:$input){ id } }`
@@ -502,6 +538,15 @@ export default function NewEntryMode(props: {
       </View>
       <View marginBottom="0.25rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
         <TextField label={t('labels.searchPlayer')} placeholder={t('placeholders.nameFilter')} value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
+        <div style={{ display:'flex', alignItems:'flex-end', gap:8 }}>
+          <TextField label={t('admin.players.newName') || '選手名'} value={quickPlayerName} onChange={e=> setQuickPlayerName(e.target.value)} width={dense?"12rem":"16rem"} />
+          <SelectField label={t('admin.players.universityReq') || '大学'} value={quickPlayerUniversityId || (opponentUniversityId || ourUniversityId)} onChange={e=> setQuickPlayerUniversityId(e.target.value)} width={dense?"12rem":"14rem"}>
+            <option value="">{t('placeholders.unselected')}</option>
+            {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
+          </SelectField>
+          <Button size="small" onClick={quickAddPlayer} isDisabled={!quickPlayerName.trim() || !(quickPlayerUniversityId || opponentUniversityId || ourUniversityId)}>{t('actions.add')}</Button>
+        </div>
+
         <Button size="small" onClick={loadRefData}>{t('actions.reloadRefs')}</Button>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <label style={{ display:'flex', alignItems:'center', gap:4, fontSize:12 }}>
@@ -562,7 +607,7 @@ export default function NewEntryMode(props: {
               <TableRow key={b.id} id={`row-${b.id}`}>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#156a15' : '#2f4f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{players[b.ourPlayerId] ?? b.ourPlayerId}</div>
+                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#156a15' : '#2f4f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{nameById[b.ourPlayerId] ?? b.ourPlayerId}</div>
                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                       <Button size="small" variation="link" title={t('actions.foulMinus')} onClick={()=> setRows(r=> ({...r, [b.id]: { ...s, leftFouls: Math.max(0, (s.leftFouls||0)-1) }}))} style={{ minWidth:22, padding:'0 4px' }}>-</Button>
                       <Badge variation={s.leftFouls>=2? 'warning':'info'} style={{ padding:'0 6px' }}>{s.leftFouls||0}</Badge>
@@ -587,7 +632,7 @@ export default function NewEntryMode(props: {
                 </TableCell>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#8a1b1b' : '#4f2f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{players[b.opponentPlayerId] ?? b.opponentPlayerId}</div>
+                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#8a1b1b' : '#4f2f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{nameById[b.opponentPlayerId] ?? b.opponentPlayerId}</div>
                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                       <Button size="small" variation="link" title={t('actions.foulMinus')} onClick={()=> setRows(r=> ({...r, [b.id]: { ...s, rightFouls: Math.max(0, (s.rightFouls||0)-1) }}))} style={{ minWidth:22, padding:'0 4px' }}>-</Button>
                       <Badge variation={s.rightFouls>=2? 'warning':'info'} style={{ padding:'0 6px' }}>{s.rightFouls||0}</Badge>
@@ -662,12 +707,12 @@ export default function NewEntryMode(props: {
               {sortedBouts().map(b=> (
                 <div key={b.id} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start', border:'1px solid #eee', borderRadius:6, padding:8 }}>
                   <div>
-                    <div style={{ fontWeight:600, marginBottom:6 }}>{players[b.ourPlayerId] || b.ourPlayerId}</div>
-                    <textarea rows={3} value={notes[b.ourPlayerId]||''} onChange={e=> setNotes(m=> ({...m, [b.ourPlayerId]: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+                    <div style={{ fontWeight:600, marginBottom:6 }}>{nameById[b.ourPlayerId] ?? b.ourPlayerId}</div>
+                    <textarea rows={3} value={notes[`${b.id}:${b.ourPlayerId}`]||''} onChange={e=> setNotes(m=> ({...m, [`${b.id}:${b.ourPlayerId}`]: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
                   </div>
                   <div>
-                    <div style={{ fontWeight:600, marginBottom:6 }}>{players[b.opponentPlayerId] || b.opponentPlayerId}</div>
-                    <textarea rows={3} value={notes[b.opponentPlayerId]||''} onChange={e=> setNotes(m=> ({...m, [b.opponentPlayerId]: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+                    <div style={{ fontWeight:600, marginBottom:6 }}>{nameById[b.opponentPlayerId] ?? b.opponentPlayerId}</div>
+                    <textarea rows={3} value={notes[`${b.id}:${b.opponentPlayerId}`]||''} onChange={e=> setNotes(m=> ({...m, [`${b.id}:${b.opponentPlayerId}`]: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
                   </div>
                 </div>
               ))}
