@@ -1,0 +1,41 @@
+ 251       const token = await getToken(); if(!token) return
+ 252       const res: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: listNotesByMatch, variables: { matchId, limit: 500 } }) })
+ 253       const j: any = await res.json(); const arr = (j?.data?.listPlayerNotesByMatch?.items ?? []) as any[]
+ 254       const map: Record<string,string> = {}; for(const it of arr){ map[it.playerId] = it.comment }
+ 255       setNotes(map)
+ 256     }catch{}
+ 257     finally{ setNotesLoading(false) }
+ 258   }
+ 259   async function saveNotes(){
+ 260     if(!matchId) { setNoteOpen(false); return }
+ 261     try{
+ 262       const token = await getToken(); if(!token) return
+ 263       for(const b of sortedBouts()){ for(const pid of [b.ourPlayerId, b.opponentPlayerId]){ if(seen.has(pid)) continue; seen.add(pid);
+ 264         const comment = (notes[pid]||'').trim()
+ 265         if(comment){
+ 266           const input: any = { playerId: pid, matchId, comment }
+ 267           try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
+ 268           try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+ 269         }
+ 270       }
+ 271     }catch{}
+ 272     setNoteOpen(false)
+ 273   }
+ 274 
+ 275   async function loadRefData(){
+ 276     setRefError(undefined)
+ 277     try{
+ 278       const token = await getToken(); if(!token) return
+ 279       // universities
+ 280       const qU = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+ 281       let ntU: string | null = null; const accU: University[] = []
+ 282       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
+ 283       setUniversities(accU)
+ 284       // players with universityId
+ 285       const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId } nextToken } }`
+ 286       let ntP: string | null = null; const accP: PlayerEx[] = []
+ 287       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
+ 288       setPlayersEx(accP)
+ 289     } catch(e:any){ setRefError(t('errors.refDataLoadFailed')) }
+ 290   }
+ 291   useEffect(()=>{ try{ const saved=localStorage.getItem('ui:dense'); if(saved!=null) setDense(saved==='1') }catch{}; try{ const re=localStorage.getItem('rules:encho'); if(re!=null) setAllowEncho(re==='1') }catch{}; try{ const rh=localStorage.getItem('rules:hantei'); if(rh!=null) setAllowHantei(rh==='1') }catch{}; loadRefData() }, [])
