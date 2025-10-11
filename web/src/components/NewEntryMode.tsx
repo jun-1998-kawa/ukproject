@@ -23,7 +23,7 @@ type PointInput = { tSec: number | ''; target: string; methods: string[] }
 type University = { id: string; name: string; shortName?: string|null }
 type PlayerEx = { id: string; name: string; nameKana?: string|null; universityId?: string|null; gender?: 'MEN'|'WOMEN'|null; enrollYear?: number|null; grade?: number|null }
 
-function IpponCell(props: {
+  function IpponCell(props: {
   value: PointInput | null
   onChange: (next: PointInput | null) => void
   targets: Master[]
@@ -93,6 +93,8 @@ function IpponCell(props: {
                   onFocus?.();
                   if(e.target.checked) onChange({ ...v, methods: [...v.methods, m.code] })
                   else onChange({ ...v, methods: v.methods.filter(x=> x!==m.code) })
+                  // Close the method picker immediately after a click for faster entry
+                  setOpen(false)
                 }} />
                 <span>{i18n.language.startsWith('ja') ? (m.nameJa ?? m.nameEn ?? m.code) : (m.nameEn ?? m.code)}</span>
               </label>
@@ -585,10 +587,10 @@ export default function NewEntryMode(props: {
         <TableHead>
           <TableRow>
             <TableCell as="th" width="16%">{t('columns.leftPlayer')}</TableCell>
-            <TableCell as="th" width="16%">A {t('columns.first')}</TableCell>
-            <TableCell as="th" width="16%">A {t('columns.second')}</TableCell>
-            <TableCell as="th" width="16%">B {t('columns.first')}</TableCell>
-            <TableCell as="th" width="16%">B {t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.first')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">{t('columns.first')}</TableCell>
             <TableCell as="th" width="16%">{t('columns.rightPlayer')}</TableCell>
             <TableCell as="th" width="8%">{t('columns.actions')}</TableCell>
           </TableRow>
@@ -640,10 +642,10 @@ export default function NewEntryMode(props: {
                     <IpponCell value={s.left2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
+                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
+                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
