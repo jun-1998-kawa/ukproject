@@ -19,6 +19,7 @@ export default function Dashboard(props:{
   homeUniversityId?: string
   apiUrl?: string
   getToken?: ()=> Promise<string|null>
+  tournamentPlaylists?: Record<string,string>
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
@@ -31,7 +32,6 @@ export default function Dashboard(props:{
   const BIN_SIZE_SEC = 15
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
   const [notes, setNotes] = useState<{ matchId:string, comment:string }[]>([])
-  const [noteModal, setNoteModal] = useState<{ open:boolean; matchId:string; text:string }>( { open:false, matchId:'', text:'' } )
   const [overallNote, setOverallNote] = useState<string>('')
   const [overallSaving, setOverallSaving] = useState<boolean>(false)
 
@@ -73,28 +73,6 @@ export default function Dashboard(props:{
       if(has) arr.push(m)
     }
     return arr
-  }
-  function openAddNote(){
-    const pm = playerMatches()
-    const firstId = pm[0]?.id || ''
-    setNoteModal({ open:true, matchId:firstId, text:'' })
-  }
-  function openEditNote(mId:string, text:string){ setNoteModal({ open:true, matchId:mId, text }) }
-  async function saveNote(){
-    if(!props.apiUrl || !props.getToken || !playerId || !noteModal.matchId) { setNoteModal({ open:false, matchId:'', text:'' }); return }
-    try{
-      const token = await props.getToken(); if(!token) return
-      const input:any = { playerId, matchId: noteModal.matchId, comment: (noteModal.text||'').trim() }
-      if(!input.comment){ setNoteModal({ open:false, matchId:'', text:'' }); return }
-      try{ await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
-      try{ await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
-      // refresh list
-      const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
-      const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
-      const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
-      setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
-    }catch{}
-    setNoteModal({ open:false, matchId:'', text:'' })
   }
 
   // Load/save overall player analysis (Player.notes)
@@ -273,6 +251,7 @@ export default function Dashboard(props:{
             <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
           </SelectField>
           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
+          {(()=>{ const tname=tournamentFilter.trim(); const url=tname? props.tournamentPlaylists?.[tname]: undefined; return url? (<a href={url} target="_blank" rel="noopener noreferrer" title="YouTube" style={{ marginLeft:-6, transform:'translateY(6px)' }}>▶</a>) : null })()}
           <SelectField label={t('dashboard.granularity')||'Granularity'} value={granularity} onChange={e=> setGranularity(e.target.value as any)} size="small" width="12rem">
             <option value="technique">{t('dashboard.gran.technique')||'Technique x Target'}</option>
             <option value="target">{t('dashboard.gran.target')||'Target only'}</option>
@@ -423,9 +402,6 @@ export default function Dashboard(props:{
           {/* Player qualitative analysis (per match) */}
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
             <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
-            <div className="no-print" style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
-              <Button size="small" onClick={openAddNote} isDisabled={!playerId || playerMatches().length===0}>{t('analysis.add')||'コメント追加'}</Button>
-            </div>
             {notes.length===0 ? (
               <div className="muted" style={{ fontSize:12 }}>{t('analysis.noNotes')||'コメントはありません'}</div>
             ) : (
@@ -435,18 +411,20 @@ export default function Dashboard(props:{
                     <TableRow>
                       <TableCell as="th">{t('labels.match')||'試合/日付'}</TableCell>
                       <TableCell as="th">{t('analysis.comment')||'コメント'}</TableCell>
-                      <TableCell as="th"></TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {notes.map((n,i)=>{
                       const m = matches.find(mm=> mm.id===n.matchId)
                       const title = m ? `${(m as any).heldOn||''} ${(m as any).tournament||''}` : n.matchId
+                      const yurl = m && (m as any).tournament ? (props.tournamentPlaylists?.[(m as any).tournament] || '') : ''
                       return (
                         <TableRow key={n.matchId+String(i)}>
-                          <TableCell>{title}</TableCell>
+                          <TableCell>
+                            {title}
+                            {yurl && (<a href={yurl} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>▶</a>)}
+                          </TableCell>
                           <TableCell>{n.comment}</TableCell>
-                          <TableCell><Button size="small" variation="link" onClick={()=> openEditNote(n.matchId, n.comment)}>{t('analysis.edit')||'編集'}</Button></TableCell>
                         </TableRow>
                       )
                     })}
@@ -457,29 +435,7 @@ export default function Dashboard(props:{
           </View>
         </View>
       )}
-      {noteModal.open && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNoteModal({ open:false, matchId:'', text:'' })}>
-          <div style={{ background:'#fff', minWidth:360, maxWidth:720, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
-            <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
-            <div style={{ display:'grid', gap:8, marginTop:12 }}>
-              <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'center' }}>
-                <div style={{ fontSize:13 }}>{t('labels.match')||'試合/日付'}</div>
-                <select value={noteModal.matchId} onChange={(e)=> setNoteModal(m=> ({ ...m, matchId: e.target.value }))} style={{ padding:'6px 8px', fontSize:13 }}>
-                  {playerMatches().map(m=> (<option key={m.id} value={m.id}>{(m as any).heldOn||''} {(m as any).tournament||''}</option>))}
-                </select>
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'start' }}>
-                <div style={{ fontSize:13 }}>{t('analysis.comment')||'コメント'}</div>
-                <textarea rows={4} value={noteModal.text} onChange={(e)=> setNoteModal(m=> ({ ...m, text: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
-              </div>
-            </div>
-            <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
-              <Button variation="link" onClick={()=> setNoteModal({ open:false, matchId:'', text:'' })}>{t('action.cancel')||'キャンセル'}</Button>
-              <Button variation="primary" onClick={saveNote} isDisabled={!noteModal.matchId || !playerId}>{t('actions.save')||'保存'}</Button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* read-only notes: edit modal removed */}
     </View>
   )
 }

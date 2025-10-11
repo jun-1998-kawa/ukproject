@@ -6,6 +6,8 @@ import { methodAllowedForTargetJaLabel } from '../lib/tech'
 type Master = { code: string; nameJa?: string; nameEn?: string }
 type Bout = {
   id: string;
+  createdAt?: string;
+  seq?: number;
   ourPlayerId: string;
   opponentPlayerId: string;
   ourPosition?: string;
@@ -236,11 +238,18 @@ export default function NewEntryMode(props: {
   const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
   const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
 
-  function uniquePlayersInMatch(){
-    const ids = new Set<string>()
-    for(const b of boutsLocal){ ids.add(b.ourPlayerId); ids.add(b.opponentPlayerId) }
-    return Array.from(ids)
+  function sortedBouts(){
+    return boutsLocal.slice().sort((a:any,b:any)=>{
+      const as = (typeof a.seq==='number')? a.seq : Number.MAX_SAFE_INTEGER
+      const bs = (typeof b.seq==='number')? b.seq : Number.MAX_SAFE_INTEGER
+      if(as!==bs) return as-bs
+      const ad = a.createdAt? new Date(a.createdAt).getTime() : 0
+      const bd = b.createdAt? new Date(b.createdAt).getTime() : 0
+      if(ad!==bd) return ad-bd
+      return String(a.id).localeCompare(String(b.id))
+    })
   }
+
   async function openNotes(){
     setNoteOpen(true)
     if(!matchId) return
@@ -258,12 +267,16 @@ export default function NewEntryMode(props: {
     if(!matchId) { setNoteOpen(false); return }
     try{
       const token = await getToken(); if(!token) return
-      for(const pid of uniquePlayersInMatch()){
-        const comment = (notes[pid]||'').trim()
-        if(comment){
-          const input: any = { playerId: pid, matchId, comment }
-          try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
-          try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+      const seen = new Set<string>()
+      for(const b of sortedBouts()){
+        for(const pid of [b.ourPlayerId, b.opponentPlayerId]){
+          if(seen.has(pid)) continue; seen.add(pid)
+          const comment = (notes[pid]||'').trim()
+          if(comment){
+            const input: any = { playerId: pid, matchId, comment }
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateNoteMut, variables: { input } }) }) }catch{}
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createNoteMut, variables: { input } }) }) }catch{}
+          }
         }
       }
     }catch{}
@@ -428,7 +441,17 @@ export default function NewEntryMode(props: {
       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
       useMatchId = j.data.createMatch.id; setMatchId(useMatchId)
     }
-    const boutInput:any = { matchId: useMatchId, ourPlayerId: newLeft, opponentPlayerId: newRight, ourPosition:null, ourStance:null, opponentStance:null, winType:null }
+    // Assign seq as next number within the match to preserve input order
+    let nextSeq = 1
+    try{
+      const m = matches.find(mm=> mm.id===useMatchId)
+      if(m){
+        const items = (m.bouts?.items ?? []) as any[]
+        const currentMax = items.reduce((mx, bb)=> typeof bb.seq==='number' && Number.isFinite(bb.seq) ? Math.max(mx, bb.seq) : mx, 0)
+        nextSeq = currentMax + 1
+      }
+    }catch{}
+    const boutInput:any = { matchId: useMatchId, ourPlayerId: newLeft, opponentPlayerId: newRight, ourPosition:null, ourStance:null, opponentStance:null, winType:null, seq: nextSeq }
     const r2= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createBoutMutation, variables:{ input:boutInput } })});
     const j2:any= await r2.json(); if(j2.errors) throw new Error(JSON.stringify(j2.errors));
     const newId = j2.data.createBout.id as string; setFocusBoutId(newId); setNewLeft(''); setNewRight(''); await onSaved()
@@ -531,7 +554,7 @@ export default function NewEntryMode(props: {
           </TableRow>
         </TableHead>
         <TableBody>
-          {boutsLocal.slice().sort((a,b)=> String(a.id).localeCompare(String(b.id))).map((b)=>{
+          {sortedBouts().map((b)=>{
             const s = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 }
             const rowValid = [s.left1, s.left2, s.right1, s.right2].every(ipponValidOrEmpty)
             const hasData = rowHasData(s)
@@ -635,16 +658,22 @@ export default function NewEntryMode(props: {
           {notesLoading ? (
             <div className="muted" style={{ padding:'12px 0' }}>{t('loading')||'Loading...'}</div>
           ) : (
-            <div style={{ display:'grid', gap:8, marginTop:8, maxHeight:'60vh', overflow:'auto' }}>
-              {uniquePlayersInMatch().map(pid=> (
-                <div key={pid} style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'start' }}>
-                  <div style={{ fontSize:13 }}>{players[pid] || pid}</div>
-                  <textarea value={notes[pid]||''} onChange={e=> setNotes(m=> ({...m, [pid]: e.target.value }))} rows={3} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+            <div style={{ display:'grid', gap:8, marginTop:8, overflow:'auto' }}>
+              {sortedBouts().map(b=> (
+                <div key={b.id} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, alignItems:'start', border:'1px solid #eee', borderRadius:6, padding:8 }}>
+                  <div>
+                    <div style={{ fontWeight:600, marginBottom:6 }}>{players[b.ourPlayerId] || b.ourPlayerId}</div>
+                    <textarea rows={3} value={notes[b.ourPlayerId]||''} onChange={e=> setNotes(m=> ({...m, [b.ourPlayerId]: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontWeight:600, marginBottom:6 }}>{players[b.opponentPlayerId] || b.opponentPlayerId}</div>
+                    <textarea rows={3} value={notes[b.opponentPlayerId]||''} onChange={e=> setNotes(m=> ({...m, [b.opponentPlayerId]: e.target.value }))} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+                  </div>
                 </div>
               ))}
             </div>
           )}
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12, position:'sticky', bottom:0, background:'#fff', paddingTop:8 }}>
             <Button variation="link" onClick={()=> setNoteOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
             <Button variation="primary" onClick={saveNotes} isDisabled={!matchId}>{t('actions.save')||'保存'}</Button>
           </div>
@@ -683,6 +712,11 @@ export default function NewEntryMode(props: {
     </>
   )
 }
+
+
+
+
+
 
 
 
