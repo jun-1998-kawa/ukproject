@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge, Heading } from '@aws-amplify/ui-react'
 import { methodAllowedForTargetJaLabel } from '../lib/tech'
+import Typeahead, { TypeaheadItem } from './Typeahead'
 
 type Master = { code: string; nameJa?: string; nameEn?: string }
 type Bout = {
@@ -20,7 +21,7 @@ type Bout = {
 }
 type PointInput = { tSec: number | ''; target: string; methods: string[] }
 type University = { id: string; name: string; shortName?: string|null }
-type PlayerEx = { id: string; name: string; universityId?: string|null; gender?: 'MEN'|'WOMEN'|null }
+type PlayerEx = { id: string; name: string; nameKana?: string|null; universityId?: string|null; gender?: 'MEN'|'WOMEN'|null; enrollYear?: number|null; grade?: number|null }
 
 function IpponCell(props: {
   value: PointInput | null
@@ -305,7 +306,7 @@ export default function NewEntryMode(props: {
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
       setUniversities(accU)
       // players with universityId and gender
-      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId gender } nextToken } }`
+      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId gender enrollYear grade } nextToken } }`
       let ntP: string | null = null; const accP: PlayerEx[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
       setPlayersEx(accP)
@@ -494,17 +495,21 @@ export default function NewEntryMode(props: {
     const newId = j2.data.createBout.id as string; setFocusBoutId(newId); setNewLeft(''); setNewRight(''); await onSaved()
   }
 
-  function buildPlayerOptionsEx(list: PlayerEx[], unis: University[], filter: string){
-    const f = filter.trim().toLowerCase(); const grouped: Record<string, PlayerEx[]> = {}
-    for(const p of list){
-      if(f && !p.name.toLowerCase().includes(f)) continue;
-      if(playerGenderFilter!=='ALL' && (p.gender||null)!==playerGenderFilter) continue;
-      const key = p.universityId ?? 'unknown'; (grouped[key]??=[]).push(p)
-    }
-    const order = Object.keys(grouped).sort((a,b)=> (a==='unknown'?'ZZZ':a).localeCompare(b==='unknown'?'ZZZ':b))
-    const opts:any[]=[]; for(const key of order){ const label = key==='unknown' ? t('labels.universityUnknown') : (unis.find(u=> u.id===key)?.name ?? key); const children = grouped[key].sort((a,b)=> a.name.localeCompare(b.name,'ja')).map(p=> (<option key={p.id} value={p.id}>{p.name}</option>)); opts.push(<optgroup key={key} label={label}>{children}</optgroup>) }
-    return opts
+  function gradeLabel(p: PlayerEx){
+    if(typeof p.grade==='number' && p.grade>0 && p.grade<10) return `${p.grade}年`
+    return ''
   }
+  const typeaheadItems: TypeaheadItem[] = (playersEx||[])
+    .filter(p=> (playerGenderFilter==='ALL') || ((p.gender||null)===playerGenderFilter))
+    .map(p=> {
+      const uni = universities.find(u=> u.id===p.universityId)
+      const uniLabel = uni?.shortName || uni?.name || ''
+      const gl = gradeLabel(p)
+      const label = [p.name, uniLabel, gl].filter(Boolean).join(' ')
+      const searchKey = [p.name, p.nameKana||'', uniLabel, gl].join(' ')
+      return { id: p.id, label, searchKey }
+    })
+    .sort((a,b)=> a.label.localeCompare(b.label,'ja'))
 
   function ipponValidOrEmpty(v: PointInput | null){ if(!v) return true; const empty = (!v.target && v.methods.length===0 && (v.tSec==='' || v.tSec===undefined)); if(empty) return true; const valid = (v.methods.length>0) && !!v.target && ((typeof v.tSec==='number' && v.tSec>=0) || v.tSec===''); return valid }
   function ipponIsValid(v: PointInput | null){ return !!(v && v.methods.length>0 && !!v.target) }
@@ -589,19 +594,19 @@ export default function NewEntryMode(props: {
           </TableRow>
           <TableRow>
             <TableCell>
-              <select value={newLeft} onChange={e=> setNewLeft(e.target.value)} style={{ width:'100%' }}>
-                <option value="">{t('placeholders.selectLeft')}</option>
-                {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
-              </select>
+              <div>
+                <label style={{ fontSize:12, color:'#444' }}>{t('placeholders.selectLeft')}</label>
+                <Typeahead value={newLeft} onChange={setNewLeft} items={typeaheadItems} width={dense? '14rem':'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
+              </div>
             </TableCell>
             <TableCell colSpan={3}>
               <div style={{ color:'#666', fontSize:12 }}>{t('hints.addNewMatch')}</div>
             </TableCell>
             <TableCell>
-              <select value={newRight} onChange={e=> setNewRight(e.target.value)} style={{ width:'100%' }}>
-                <option value="">{t('placeholders.selectRight')}</option>
-                {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
-              </select>
+              <div>
+                <label style={{ fontSize:12, color:'#444' }}>{t('placeholders.selectRight')}</label>
+                <Typeahead value={newRight} onChange={setNewRight} items={typeaheadItems} width={dense? '14rem':'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
+              </div>
             </TableCell>
             <TableCell>
               <Button size="small" onClick={addNewBout} isDisabled={!newLeft || !newRight}>{t('actions.add')}</Button>
