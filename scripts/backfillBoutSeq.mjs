@@ -79,7 +79,10 @@ async function signedFetch(url, { method = 'POST', headers = {}, body } = {}) {
 const listMatches = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt } nextToken } }`
 // Some environments may not have 'seq' on Bout yet. Query only safe fields.
 const listBoutsByMatch = `query ListBoutsByMatch($matchId:ID!,$limit:Int,$nextToken:String){ listBoutsByMatch(matchId:$matchId,limit:$limit,nextToken:$nextToken){ items{ id createdAt } nextToken } }`
-const updateBout = `mutation UpdateBout($input: UpdateBoutInput!){ updateBout(input:$input){ id seq } }`
+// Keep selection minimal to avoid schema mismatches on old APIs
+const updateBout = `mutation UpdateBout($input: UpdateBoutInput!){ updateBout(input:$input){ id } }`
+// Preflight: detect if Bout.seq exists on the API
+const listBoutsWithSeq_check = `query ListBoutsByMatchSeq($matchId:ID!,$limit:Int){ listBoutsByMatch(matchId:$matchId,limit:$limit){ items{ id seq } } }`
 
 async function gql(query, variables) {
   const res = await signedFetch(GRAPHQL_URL, { method: 'POST', body: JSON.stringify({ query, variables }) })
@@ -112,6 +115,22 @@ async function getBouts(matchId) {
 
 async function main() {
   console.log(`[backfill] GraphQL: ${GRAPHQL_URL}`)
+  // Preflight check against the first match to see if 'seq' is supported
+  let seqSupported = true
+  try {
+    // Try small call; we only need an existing matchId. If none, skip.
+    const firstPage = await gql(listMatches, { limit: 1 })
+    const firstMatch = firstPage?.listMatches?.items?.[0]
+    if (firstMatch) {
+      try { await gql(listBoutsWithSeq_check, { matchId: firstMatch.id, limit: 1 }) }
+      catch (e) { seqSupported = false }
+    }
+  } catch {}
+  if (!seqSupported) {
+    console.error('[backfill] The API does not expose Bout.seq yet. Please deploy the backend schema with Bout.seq and retry.')
+    console.error('Hint: amplify/data/resource.ts should define Bout.seq; then deploy (e.g., npx ampx push or CI pipeline).')
+    process.exit(1)
+  }
   const updates = []
   for await (const m of iterMatches()) {
     const bouts = await getBouts(m.id)

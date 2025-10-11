@@ -20,7 +20,7 @@ type Bout = {
 }
 type PointInput = { tSec: number | ''; target: string; methods: string[] }
 type University = { id: string; name: string; shortName?: string|null }
-type PlayerEx = { id: string; name: string; universityId?: string|null }
+type PlayerEx = { id: string; name: string; universityId?: string|null; gender?: 'MEN'|'WOMEN'|null }
 
 function IpponCell(props: {
   value: PointInput | null
@@ -136,6 +136,7 @@ export default function NewEntryMode(props: {
   const [newLeft, setNewLeft] = useState<string>('')
   const [newRight, setNewRight] = useState<string>('')
   const [playerFilter, setPlayerFilter] = useState('')
+  const [playerGenderFilter, setPlayerGenderFilter] = useState<'ALL'|'MEN'|'WOMEN'>('ALL')
   const [universities, setUniversities] = useState<University[]>([])
   const [playersEx, setPlayersEx] = useState<PlayerEx[]>([])
   const [ourUniversityId, setOurUniversityId] = useState<string>('')
@@ -303,8 +304,8 @@ export default function NewEntryMode(props: {
       let ntU: string | null = null; const accU: University[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
       setUniversities(accU)
-      // players with universityId
-      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId } nextToken } }`
+      // players with universityId and gender
+      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId gender } nextToken } }`
       let ntP: string | null = null; const accP: PlayerEx[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
       setPlayersEx(accP)
@@ -495,7 +496,11 @@ export default function NewEntryMode(props: {
 
   function buildPlayerOptionsEx(list: PlayerEx[], unis: University[], filter: string){
     const f = filter.trim().toLowerCase(); const grouped: Record<string, PlayerEx[]> = {}
-    for(const p of list){ if(f && !p.name.toLowerCase().includes(f)) continue; const key = p.universityId ?? 'unknown'; (grouped[key]??=[]).push(p) }
+    for(const p of list){
+      if(f && !p.name.toLowerCase().includes(f)) continue;
+      if(playerGenderFilter!=='ALL' && (p.gender||null)!==playerGenderFilter) continue;
+      const key = p.universityId ?? 'unknown'; (grouped[key]??=[]).push(p)
+    }
     const order = Object.keys(grouped).sort((a,b)=> (a==='unknown'?'ZZZ':a).localeCompare(b==='unknown'?'ZZZ':b))
     const opts:any[]=[]; for(const key of order){ const label = key==='unknown' ? t('labels.universityUnknown') : (unis.find(u=> u.id===key)?.name ?? key); const children = grouped[key].sort((a,b)=> a.name.localeCompare(b.name,'ja')).map(p=> (<option key={p.id} value={p.id}>{p.name}</option>)); opts.push(<optgroup key={key} label={label}>{children}</optgroup>) }
     return opts
@@ -538,6 +543,11 @@ export default function NewEntryMode(props: {
       </View>
       <View marginBottom="0.25rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
         <TextField label={t('labels.searchPlayer')} placeholder={t('placeholders.nameFilter')} value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
+        <SelectField label={t('admin.players.gender')||'性別'} value={playerGenderFilter} onChange={e=> setPlayerGenderFilter(e.target.value as any)} size="small" width={dense?"8rem":"10rem"}>
+          <option value="ALL">{t('filters.all')||'すべて'}</option>
+          <option value="MEN">{t('gender.MEN')||'男子'}</option>
+          <option value="WOMEN">{t('gender.WOMEN')||'女子'}</option>
+        </SelectField>
         <div style={{ display:'flex', alignItems:'flex-end', gap:8 }}>
           <TextField label={t('admin.players.newName') || '選手名'} value={quickPlayerName} onChange={e=> setQuickPlayerName(e.target.value)} width={dense?"12rem":"16rem"} />
           <SelectField label={t('admin.players.universityReq') || '大学'} value={quickPlayerUniversityId || (opponentUniversityId || ourUniversityId)} onChange={e=> setQuickPlayerUniversityId(e.target.value)} width={dense?"12rem":"14rem"}>
