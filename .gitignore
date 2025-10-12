@@ -11,7 +11,7 @@ web/.vite/
 .env.*
 
 # Amplify generated outputs (do not commit)
-# amplify_outputs.json
+amplify_outputs.json
 .amplify/generated/
 .amplify/artifacts/
 

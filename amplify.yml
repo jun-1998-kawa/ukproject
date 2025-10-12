@@ -7,19 +7,26 @@ backend:
         - |
           set -e
           echo "[backend] ampx version:" $(npx ampx --version || echo "(not available)")
+          # If outputs already exist in repo, use them and exit
           if [ -s amplify_outputs.json ]; then
-            echo "[backend] amplify_outputs.json found."
-          else
-            echo "[backend] amplify_outputs.json not found. Will try to generate via app-id/branch."
-            # Resolve App ID
-            if [ -n "$BACKEND_APP_ID" ]; then APP_ID="$BACKEND_APP_ID";
-            elif [ -n "$AMPLIFY_APP_ID" ]; then APP_ID="$AMPLIFY_APP_ID";
-            else APP_ID="$AWS_APP_ID"; fi
-            echo "[backend] APP_ID='$APP_ID' AWS_BRANCH='$AWS_BRANCH'"
-            if [ -z "$APP_ID" ]; then echo "[backend] ERROR: APP_ID unresolved. Set BACKEND_APP_ID in Amplify environment variables."; exit 1; fi
-            echo "[backend] Generating outputs..."
-            npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --out-dir .
+            echo "[backend] amplify_outputs.json found. Using committed outputs."
+            exit 0
           fi
+          echo "[backend] amplify_outputs.json not found. Will generate via App ID / Branch."
+          # Resolve App ID
+          APP_ID=""
+          if [ -n "$BACKEND_APP_ID" ]; then APP_ID="$BACKEND_APP_ID";
+          elif [ -n "$AMPLIFY_APP_ID" ]; then APP_ID="$AMPLIFY_APP_ID";
+          elif [ -n "$AWS_APP_ID" ]; then APP_ID="$AWS_APP_ID"; fi
+          BRANCH="${AWS_BRANCH:-$AMPLIFY_BRANCH}"
+          echo "[backend] APP_ID='$APP_ID' BRANCH='$BRANCH'"
+          if [ -z "$APP_ID" ] || [ -z "$BRANCH" ]; then
+            echo "[backend] ERROR: APP_ID/BRANCH unresolved. Set BACKEND_APP_ID and ensure AWS_BRANCH (or AMPLIFY_BRANCH) is defined."
+            exit 1
+          fi
+          echo "[backend] Generating outputs..."
+          npx ampx generate outputs --app-id "$APP_ID" --branch "$BRANCH" --out-dir .
+          ls -l amplify_outputs.json || { echo "[backend] ERROR: outputs generation did not create amplify_outputs.json"; exit 1; }
   artifacts:
     baseDirectory: .
     files:
