@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import ChatSummaryModal from './ChatSummaryModal'
 
 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
@@ -23,6 +24,7 @@ export default function Dashboard(props:{
   const [tournamentFilter, setTournamentFilter] = useState<string>('')
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [aiOpen, setAiOpen] = useState<boolean>(false)
 
   const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
 
@@ -127,6 +129,9 @@ export default function Dashboard(props:{
           </SelectField>
           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
+          <div className="no-print" style={{ display:'flex', alignItems:'center' }}>
+            <Button size="small" onClick={()=> setAiOpen(true)}>🤖 {t('ai.summary') || 'AI要約'}</Button>
+          </div>
           <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">
             <option value="all">{t('filters.all')}</option>
             <option value="official">{t('filters.official')}</option>
@@ -200,7 +205,23 @@ export default function Dashboard(props:{
           </View>
         </View>
       )}
+      <ChatSummaryModal
+        open={aiOpen}
+        onClose={()=> setAiOpen(false)}
+        aiUrl={(window as any).__aiUrl || (import.meta as any).env?.VITE_AI_API_URL || null}
+        getToken={async()=>{ try{ const a = await import('aws-amplify/auth'); return (await a.fetchAuthSession()).tokens?.idToken?.toString() ?? null }catch{return null} }}
+        language={(navigator?.language||'ja').startsWith('ja') ? 'ja' : 'en'}
+        playerName={ players[playerId] || '' }
+        filters={{ from, to, tournament: tournamentFilter, official: officialFilter }}
+        stats={stat}
+        notes={[]}
+      />
     </View>
   )
 }
+
+// Mount AI modal near root to avoid layout issues
+// Note: we render it at the bottom of component return above; to keep file minimal, append here via JSX injection is omitted.
+
+
 
