@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import AIPanel from './AIPanel'
 
 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
@@ -14,15 +15,19 @@ export default function Dashboard(props:{
   masters: { targets: Master[]; methods: Master[] }
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
+  ai?: { apiUrl: string; getToken: ()=>Promise<string> }
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
+  const ai = props.ai
   const [playerId, setPlayerId] = useState<string>('')
   const [from, setFrom] = useState<string>('')
   const [to, setTo] = useState<string>('')
   const [tournamentFilter, setTournamentFilter] = useState<string>('')
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPayload, setAiPayload] = useState<any|null>(null)
 
   const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
 
@@ -196,9 +201,33 @@ export default function Dashboard(props:{
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
-          </View>
+          </Table>
         </View>
+        {ai && (
+          <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end' }}>
+            <Button variation="primary" onClick={()=> {
+              if(!stat || !playerId) return
+              const payload = {
+                version: 'v1', mode: 'personal', locale: (navigator?.language||'ja'),
+                filters: { from, to, type: officialFilter, tournamentQuery: tournamentFilter||'' },
+                subject: { playerId, displayName: players[playerId]||playerId },
+                sampleSizes: { matches: (matches||[]).length, bouts: stat.bouts },
+                stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, ppg: stat.ppg, diff: stat.diff, winRate: stat.winRate, avgTimeToScoreSec: stat.avgTime, fastestSec: stat.fastest, slowestSec: stat.slowest },
+                topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                vsOpponents: (stat.vsTop||[]).map(([oppId, v]: any)=> ({ opponentId: oppId, name: players[oppId]||oppId, ...v })),
+                notes: { dataSource: 'client-aggregated' }
+              }
+              setAiPayload(payload); setAiOpen(true)
+            }}>
+              AI要約
+            </Button>
+          </div>
+        )}
+      </View>
+      )}
+      {ai && (
+        <AIPanel open={aiOpen} onClose={()=> setAiOpen(false)} apiUrl={ai.apiUrl} getToken={ai.getToken} payload={aiPayload} />
       )}
     </View>
   )

@@ -1,4 +1,5 @@
 import { a, defineData, type ClientSchema } from "@aws-amplify/backend";
+import { aiCoach } from "../functions/aiCoach/resource.ts";
 
 // Enums (string-based for flexibility)
 const TargetValues = ["MEN", "KOTE", "DO", "TSUKI"] as const;
@@ -9,6 +10,31 @@ const WinTypeValues = ["IPPON","NIHON","HANSOKU","HANTEI"] as const;
 const PointJudgementValues = ["REGULAR","ENCHO","HANSOKU"] as const;
 
 const schema = a.schema({
+  // ---- Custom types for AI integration ----
+  AiResponse: a.customType({
+    text: a.string().required(),
+    conversationId: a.string(),
+    model: a.string(),
+  }),
+  AiAskInput: a.customType({
+    question: a.string().required(),
+    payload: a.json().required(),
+    conversationId: a.string(),
+  }),
+  aiSummarize: a.mutation()
+    .arguments({ payload: a.json().required() })
+    .returns(a.ref("AiResponse"))
+    .authorization((allow)=>[
+      allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["read"]),
+    ])
+    .handler(a.handler.function(aiCoach)),
+  aiAsk: a.mutation()
+    .arguments({ input: a.ref("AiAskInput").required() })
+    .returns(a.ref("AiResponse"))
+    .authorization((allow)=>[
+      allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["read"]),
+    ])
+    .handler(a.handler.function(aiCoach)),
   University: a.model({
     name: a.string().required(),
     shortName: a.string(),

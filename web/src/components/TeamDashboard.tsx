@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import AIPanel from './AIPanel'
 
 type Match = { id: string; heldOn: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
@@ -11,15 +12,19 @@ export default function TeamDashboard(props:{
   universities: Record<string,string>
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
+  ai?: { apiUrl: string; getToken: ()=>Promise<string> }
 }){
   const { t, i18n } = useTranslation()
   const { matches, universities, labelJa, homeUniversityId } = props
+  const ai = props.ai
   const [teamId, setTeamId] = useState<string>('')
   const [from, setFrom] = useState<string>('')
   const [to, setTo] = useState<string>('')
   const [tournamentFilter, setTournamentFilter] = useState<string>('')
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPayload, setAiPayload] = useState<any|null>(null)
 
   useEffect(()=>{ if(!teamId && homeUniversityId) setTeamId(homeUniversityId) }, [homeUniversityId])
 
@@ -243,7 +248,7 @@ export default function TeamDashboard(props:{
                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>
+          <TableBody>
                 {(stat.vsTop as any).map(([oppId, v]:[string, any])=> (
                   <TableRow key={oppId}>
                     <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
@@ -258,6 +263,27 @@ export default function TeamDashboard(props:{
               </TableBody>
             </Table>
           </View>
+          {ai && (
+            <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end' }}>
+              <Button variation="primary" onClick={()=> {
+                if(!stat || !teamId) return
+                const payload = {
+                  version: 'v1', mode: 'team', locale: (navigator?.language||'ja'),
+                  filters: { from, to, type: officialFilter, tournamentQuery: tournamentFilter||'' },
+                  subject: { teamId, displayName: universities[teamId]||teamId },
+                  sampleSizes: { matches: (matches||[]).length, bouts: stat.bouts },
+                  stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, diff: stat.diff },
+                  topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                  topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                  vsTeams: (stat.vsTop||[]).map(([oppTeamId, v]: any)=> ({ teamId: oppTeamId, name: universities[oppTeamId]||oppTeamId, ...v })),
+                  notes: { dataSource: 'client-aggregated' }
+                }
+                setAiPayload(payload); setAiOpen(true)
+              }}>
+                AI要約
+              </Button>
+            </div>
+          )}
 
           {/* Match-level W/L/D and tournament ranking */}
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
@@ -339,6 +365,9 @@ export default function TeamDashboard(props:{
             </Table>
           </View>
         </View>
+      )}
+      {ai && (
+        <AIPanel open={aiOpen} onClose={()=> setAiOpen(false)} apiUrl={ai.apiUrl} getToken={ai.getToken} payload={aiPayload} />
       )}
       {/* Print styles */}
       <style>{`@media print { .no-print { display: none !important; } .app-sidebar { display:none !important } .app-main { padding: 0 !important } }`}</style>
