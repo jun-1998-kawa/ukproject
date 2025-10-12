@@ -51,5 +51,6 @@
     "noNotes": "No comments",
     "add": "Add Comment",
     "edit": "Edit"
-  }
+  },
+  "ai": { "summary": "AI Summary" }
 }

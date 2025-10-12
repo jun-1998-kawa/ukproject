@@ -52,6 +52,7 @@ export default function App() {
   const [showLegacy, setShowLegacy] = useState(false)
 
   const apiUrl = (outputs as any).data.url as string
+  const aiUrl: string | undefined = (outputs as any).api?.ai?.url
 
   // Persist official/practice/intra filter in localStorage
   useEffect(()=>{
@@ -340,6 +341,8 @@ export default function App() {
                   apiUrl={apiUrl}
                   getToken={getToken}
                   tournamentPlaylists={tournamentPlaylists}
+                  // Optional Bedrock API (Amplify REST)
+                  aiUrl={aiUrl}
                 />
               ) : (
                 <TeamDashboard

@@ -90,4 +90,19 @@
     "order": 13,
     "active": true
   }
+,
+  {
+    "code": "KATATE",
+    "nameJa": "片手",
+    "nameEn": "One-hand",
+    "order": 14,
+    "active": true
+  },
+  {
+    "code": "MOROTE",
+    "nameJa": "諸手",
+    "nameEn": "Two-hands",
+    "order": 15,
+    "active": true
+  }
 ]

@@ -10,7 +10,10 @@
                    "official":  "公式戦",
                    "practice":  "練習試合",
                    "intra":  "部内戦"
-               },
+  },
+  "ai": {
+    "summary": "AI要約"
+  },
     "columns":  {
                     "leftPlayer":  "左選手",
                     "rightPlayer":  "右選手",

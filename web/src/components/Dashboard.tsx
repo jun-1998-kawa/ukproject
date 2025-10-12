@@ -2,6 +2,7 @@
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
 import Typeahead, { TypeaheadItem } from './Typeahead'
+import ChatSummaryModal from './ChatSummaryModal'
 
 // Shared color palette for charts/legend
 const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
@@ -21,6 +22,7 @@ export default function Dashboard(props:{
   apiUrl?: string
   getToken?: ()=> Promise<string|null>
   tournamentPlaylists?: Record<string,string>
+  aiUrl?: string | undefined
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
@@ -35,6 +37,7 @@ export default function Dashboard(props:{
   const [notes, setNotes] = useState<{ matchId:string, comment:string }[]>([])
   const [overallNote, setOverallNote] = useState<string>('')
   const [overallSaving, setOverallSaving] = useState<boolean>(false)
+  const [aiOpen, setAiOpen] = useState<boolean>(false)
 
   // Optional rich player list for better labels
   type PlayerLite = { id:string; name:string; nameKana?:string|null; universityId?:string|null; grade?:number|null }
@@ -281,6 +284,9 @@ export default function Dashboard(props:{
             <label style={{ fontSize:12, color:'#444' }}>{t('dashboard.selectPlayer')}</label>
             <Typeahead value={playerId} onChange={setPlayerId} items={typeaheadItems} width={'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
           </div>
+          <div className="no-print" style={{ display:'flex', alignItems:'center' }}>
+            <Button size="small" onClick={()=> setAiOpen(true)} isDisabled={!playerId}>🤖 {t('ai.summary') || 'AI要約'}</Button>
+          </div>
           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
           <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">
@@ -475,6 +481,17 @@ export default function Dashboard(props:{
         </View>
       )}
       {/* read-only notes: edit modal removed */}
+      <ChatSummaryModal
+        open={aiOpen}
+        onClose={()=> setAiOpen(false)}
+        aiUrl={(props as any).aiUrl}
+        getToken={props.getToken}
+        language={(navigator?.language||'ja').startsWith('ja') ? 'ja' : 'en'}
+        playerName={ players[playerId] || '' }
+        filters={{ from, to, tournament: tournamentFilter, official: officialFilter }}
+        stats={stat}
+        notes={notes.map(n=> ({ match: n.matchId, comment: n.comment }))}
+      />
     </View>
   )
 }
