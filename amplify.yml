@@ -19,7 +19,8 @@ backend:
           if [ -s amplify_outputs.json ]; then
             echo "outputs ok"
           else
-            npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
+            # Amplify Gen 2 supports outputs-version values: 0 (classic) or 1 (amplify_outputs)
+            npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1 --out-dir .
           fi
   artifacts:
     baseDirectory: .
