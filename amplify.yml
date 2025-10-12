@@ -3,25 +3,10 @@ backend:
   phases:
     build:
       commands:
-        - npm ci --cache .npm --prefer-offline
         - |
           set -e
-          # Resolve App ID (prefer explicit BACKEND_APP_ID)
-          if [ -n "$BACKEND_APP_ID" ]; then APP_ID="$BACKEND_APP_ID";
-          elif [ -n "$AMPLIFY_APP_ID" ]; then APP_ID="$AMPLIFY_APP_ID";
-          else APP_ID="$AWS_APP_ID"; fi
-          if [ -z "$APP_ID" ]; then echo "APP_ID unresolved. Set BACKEND_APP_ID in env vars."; exit 1; fi
-          # Deploy backend (quiet)
-          if ! npx ampx pipeline-deploy --app-id "$APP_ID" --branch "$AWS_BRANCH" >/dev/null 2>&1; then
-            npx ampx push --app-id "$APP_ID" --branch "$AWS_BRANCH" >/dev/null 2>&1
-          fi
-          # If outputs already written by deploy, skip. Otherwise generate via app-id/branch
-          if [ -s amplify_outputs.json ]; then
-            echo "outputs ok"
-          else
-            # Amplify Gen 2 supports outputs-version values: 0 (classic) or 1 (amplify_outputs)
-            npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1 --out-dir .
-          fi
+          echo "Skipping backend deploy; using committed amplify_outputs.json"
+          if [ ! -s amplify_outputs.json ]; then echo "amplify_outputs.json missing"; exit 1; fi
   artifacts:
     baseDirectory: .
     files:
