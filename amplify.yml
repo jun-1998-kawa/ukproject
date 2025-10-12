@@ -35,6 +35,9 @@ frontend:
   phases:
     preBuild:
       commands:
+        - nvm install 18 || true
+        - nvm use 18 || true
+        - node -v && npm -v
         - npm --prefix web ci --cache web/.npm --prefer-offline
     build:
       commands:
