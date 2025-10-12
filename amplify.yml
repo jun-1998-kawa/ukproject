@@ -35,10 +35,10 @@ frontend:
   phases:
     preBuild:
       commands:
-        - cd web && npm ci --cache .npm --prefer-offline
+        - npm --prefix web ci --cache web/.npm --prefer-offline
     build:
       commands:
-        - cd web && npm run build
+        - npm --prefix web run build
   artifacts:
     baseDirectory: web/dist
     files:
