@@ -1,0 +1,81 @@
+                        <a href={ytMap[r.tournament]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>
+                      )}
+                    </TableCell>
+                    <TableCell>{r.teamWins}</TableCell>
+                    <TableCell>{r.oppWins}</TableCell>
+                    <TableCell>{r.draws}</TableCell>
+                    <TableCell>{r.result}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.tournamentRanking') || '大会ランキング'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">#</TableCell>
+                  <TableCell as="th">{t('dashboard.tournament')||'大会'}</TableCell>
+                  <TableCell as="th">{t('dashboard.matches')||'試合数'}</TableCell>
+                  <TableCell as="th">{t('dashboard.wins')||'勝'}</TableCell>
+                  <TableCell as="th">{t('dashboard.losses')||'敗'}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')||'分'}</TableCell>
+                  <TableCell as="th">{t('dashboard.winRate')||'勝率'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(matchStats?.ranking||[]).map((r, i)=> (
+                  <TableRow key={r.name+String(i)}>
+                    <TableCell>{i+1}</TableCell>
+                    <TableCell>
+                      {r.name}
+                      {r.name && ytMap[r.name] && (
+                        <a href={ytMap[r.name]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>
+                      )}
+                    </TableCell>
+                    <TableCell>{r.matches}</TableCell>
+                    <TableCell>{r.wins}</TableCell>
+                    <TableCell>{r.losses}</TableCell>
+                    <TableCell>{r.draws}</TableCell>
+                    <TableCell>{(r.winRate*100).toFixed(1)}%</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
+          {/* Player contribution list */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.playerContribution')||'選手貢献'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{t('dashboard.player')||'選手'}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsFor')||'PF'}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsAgainst')||'PA'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {playerContrib.map(p=> (
+                  <TableRow key={p.playerId}>
+                    <TableCell>{p.name}</TableCell>
+                    <TableCell>{p.pf}</TableCell>
+                    <TableCell>{p.pa}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+        </View>
+      )}
+      {/* Print styles */}
+      <style>{`@media print { .no-print { display: none !important; } .app-sidebar { display:none !important } .app-main { padding: 0 !important } }`}</style>
+      {ytOpen && (
+        <div className="no-print" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setYtOpen(false)}>

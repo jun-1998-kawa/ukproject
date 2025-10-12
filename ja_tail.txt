@@ -1,0 +1,30 @@
+                      "fastest":  "最速",
+                      "slowest":  "最遅",
+                      "pointsPerBout":  "平均本数/試合",
+                      "diff":  "本数差",
+                      "teamTitle":  "団体ダッシュボード",
+                      "selectTeam":  "団体",
+                      "matchSummary":  "試合結果（団体）",
+                      "teamWins":  "団体勝",
+                      "oppWins":  "相手勝",
+                      "tournamentRanking":  "大会ランキング",
+                      "matches":  "試合数",
+                      "playerContribution":  "選手貢献",
+                      "player":  "選手",
+                      "vsStance":  "対変刀",
+                      "vsHentou":  "対変刀"
+                  },
+    "filters":  {
+                    "type":  "種別",
+                    "all":  "すべて",
+                    "official":  "公式戦のみ",
+                    "practice":  "練習試合のみ",
+                    "intra":  "部内戦のみ"
+                },
+    "export":  {
+                   "print":  "印刷",
+                   "players":  "選手貢献をCSV出力",
+                   "tournaments":  "大会別成績をCSV出力",
+                   "vsTeams":  "対戦団体成績をCSV出力"
+               }
+}

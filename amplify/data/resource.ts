@@ -36,6 +36,8 @@ const schema = a.schema({
     university: a.belongsTo("University","universityId"),
     name: a.string().required(),
     nameKana: a.string(),
+    // Gender category for competition: MEN(男子) / WOMEN(女子)
+    gender: a.enum(["MEN","WOMEN"]),
     grade: a.integer(),
     enrollYear: a.integer(),
     gradeOverride: a.integer(),
@@ -56,6 +58,7 @@ const schema = a.schema({
     idx("universityId").queryField("listPlayersByUniversity"),
     idx("name").queryField("listPlayersByName"),
     idx("studentNo").queryField("getPlayerByStudentNo"),
+    idx("gender").queryField("listPlayersByGender"),
   ]).authorization((allow)=>[
     allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
     allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
@@ -131,6 +134,7 @@ const schema = a.schema({
   Bout: a.model({
     matchId: a.id().required(),
     match: a.belongsTo("Match","matchId"),
+    seq: a.integer(),
     ourPlayerId: a.id().required(),
     ourPlayer: a.belongsTo("Player","ourPlayerId"),
     opponentPlayerId: a.id().required(),
@@ -265,6 +269,36 @@ const schema = a.schema({
   .identifier(["pk","sk"]) // composite primary key guarantees uniqueness
   .authorization((allow)=>[
     allow.groups(["ADMINS","COACHES"]).to(["create","delete","read"]),
+    allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
+  ]),
+
+  // Tournament master (canonical tournament names + YouTube playlist)
+  TournamentMaster: a.model({
+    name: a.string().required(),
+    shortName: a.string(),
+    youtubePlaylist: a.string(),
+    active: a.boolean().default(true),
+  })
+  .identifier(["name"]) // unique by name
+  .authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
+    allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
+  ]),
+
+  // Qualitative notes per player per match
+  PlayerNote: a.model({
+    playerId: a.id().required(),
+    matchId: a.id().required(),
+    comment: a.string().required(),
+    authorUserId: a.string(),
+  })
+  .identifier(["playerId","matchId"]) // one note per player per match (upsert)
+  .secondaryIndexes((idx)=>[
+    idx("playerId").sortKeys(["matchId"]).queryField("listPlayerNotesByPlayer"),
+    idx("matchId").sortKeys(["playerId"]).queryField("listPlayerNotesByMatch"),
+  ])
+  .authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES"]).to(["create","update","delete","read"]),
     allow.groups(["ANALYSTS","VIEWERS"]).to(["read"]),
   ]),
 });

@@ -1,0 +1,60 @@
+import { useTranslation } from 'react-i18next'
+import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, TextField, Button, Flex } from '@aws-amplify/ui-react'
+
+type Match = { id: string; heldOn: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
+type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
+
+export default function TeamDashboard(props:{ matches: Match[]; universities: Record<string,string>; labelJa: { target: Record<string,string>, method: Record<string,string> }; homeUniversityId?: string; players?: Record<string,string>; apiUrl?: string; getToken?: ()=> Promise<string|null>; tournamentPlaylists?: Record<string,string>; }){
+  const { t, i18n } = useTranslation()
+  const { matches, universities, labelJa, homeUniversityId, players } = props
+  const [teamId, setTeamId] = useState<string>('')
+  const [from, setFrom] = useState<string>('')
+  const [to, setTo] = useState<string>('')
+  const [tournamentFilter, setTournamentFilter] = useState<string>('')
+  const TOP_N = 5
+  const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  // YouTube playlists per tournament
+  const [ytMap, setYtMap] = useState<Record<string,string>>(props.tournamentPlaylists || {})
+  const [ytOpen, setYtOpen] = useState(false)
+
+  useEffect(()=>{ if(!teamId && homeUniversityId) setTeamId(homeUniversityId) }, [homeUniversityId])
+
+  const teamList = useMemo(()=>{
+    const ids = new Set<string>()
+    for(const m of matches){ if(m.ourUniversityId) ids.add(m.ourUniversityId); if(m.opponentUniversityId) ids.add(m.opponentUniversityId) }
+    return Array.from(ids).map(id=> [id, universities[id] || id] as const).sort((a,b)=> a[1].localeCompare(b[1],'ja'))
+  }, [matches, universities])
+
+  // Unique tournament names across all matches (sorted)
+  const tournamentNames = useMemo(()=>{
+    const s = new Set<string>()
+    for(const m of matches){ if(m.tournament) s.add(m.tournament) }
+    return Array.from(s).sort((a,b)=> a.localeCompare(b,'ja'))
+  }, [matches])
+
+  useEffect(()=>{
+    try{ const raw = localStorage.getItem('yt.playlists'); if(raw){ const j = JSON.parse(raw); if(j && typeof j==='object') setYtMap(j) } }catch{}
+  },[])
+  useEffect(()=>{ try{ const srv = (window as any).__tournamentPlaylists as Record<string,string>|undefined; if(srv){ setYtMap(m=> ({ ...srv, ...m })) } }catch{} },[])
+  function canonicalPlaylistUrl(input: string): string | '' {
+    const s = (input||'').trim()
+    if(!s) return ''
+    try{
+      if(/^https?:\/\//i.test(s)){
+        const u = new URL(s)
+        const id = u.searchParams.get('list') || ''
+        return id ? `https://www.youtube.com/playlist?list=${id}` : s
+      }
+      // treat as playlist id
+      return `https://www.youtube.com/playlist?list=${s}`
+    }catch{ return '' }
+  }
+
+  async function saveYt(){
+    try{ localStorage.setItem('yt.playlists', JSON.stringify(ytMap)) }catch{}
+    if(props.apiUrl && props.getToken){
+      try{
+        const token = await props.getToken();
+        if(token){
+          const updateMut = `mutation UpdateTournamentMaster($input: UpdateTournamentMasterInput!){ updateTournamentMaster(input:$input){ name } }`

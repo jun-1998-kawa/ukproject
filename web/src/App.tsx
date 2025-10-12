@@ -16,14 +16,14 @@ import outputs from '../../amplify_outputs.json'
 
 Amplify.configure(outputs)
 
-type Match = { id: string; heldOn: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
-type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+type Match = { id: string; heldOn: string; createdAt?: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
+type Bout = { id: string; createdAt?: string; seq?: number; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
 type Point = { id?: string; tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
 
-const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement } } } } } nextToken } }`
+const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id createdAt seq ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement recordedAt } } } } } nextToken } }`
 const listUniversitiesHome = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id isHome } nextToken } }`
 const listUniversitiesNames = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName isHome } nextToken } }`
-const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } }`
+const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } listTournamentMasters { items { name shortName youtubePlaylist active } } }`
 const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name } nextToken } }`
 const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
 const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input) { id } }`
@@ -37,6 +37,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [masters, setMasters] = useState<any>({ targets: [], methods: [], positions: [] })
   const [players, setPlayers] = useState<Record<string,string>>({})
+  const [tournamentPlaylists, setTournamentPlaylists] = useState<Record<string,string>>({})
   const [labelJa, setLabelJa] = useState<{ target: Record<string,string>, method: Record<string,string>, position: Record<string,string> }>({ target: {}, method: {}, position: {} })
   const [selectedMatchId, setSelectedMatchId] = useState('')
   const [selectedBoutId, setSelectedBoutId] = useState('')
@@ -51,6 +52,7 @@ export default function App() {
   const [showLegacy, setShowLegacy] = useState(false)
 
   const apiUrl = (outputs as any).data.url as string
+  const aiUrl: string | undefined = (outputs as any).api?.ai?.url
 
   // Persist official/practice/intra filter in localStorage
   useEffect(()=>{
@@ -107,7 +109,7 @@ export default function App() {
         do{
           const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: listUniversitiesNames, variables: { limit: 200, nextToken } }) })
           const j: any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
-          for(const u of j.data.listUniversities.items){ map[u.id] = (u.shortName||u.name||u.id) }
+          for(const u of j.data.listUniversities.items){ map[u.id] = (u.name||u.shortName||u.id) }
           nextToken = j.data.listUniversities.nextToken
         } while(nextToken)
         setUniversities(map)
@@ -156,6 +158,16 @@ export default function App() {
         acc.push(...json.data.listMatches.items)
         nextToken = json.data.listMatches.nextToken
       } while(nextToken)
+      // Deterministic order: latest first by heldOn, then createdAt, then id
+      acc.sort((a:any,b:any)=>{
+        const ah = new Date(a.heldOn).getTime() || 0
+        const bh = new Date(b.heldOn).getTime() || 0
+        if(bh!==ah) return bh-ah
+        const ac = new Date(a.createdAt ?? 0).getTime() || 0
+        const bc = new Date(b.createdAt ?? 0).getTime() || 0
+        if(bc!==ac) return bc-ac
+        return String(b.id).localeCompare(String(a.id))
+      })
       setMatches(acc)
     } catch (e: any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
   }
@@ -176,12 +188,22 @@ export default function App() {
         { code: 'AIKOTE', nameJa: '相小手', nameEn: 'Aikote' },
       ]
       for(const ex of extraMethods){ if(!mItems.some((m:any)=> m.code===ex.code)) mItems = [...mItems, ex] }
+      // Ensure requested additions are present (even if not in masters yet)
+      const ensureMethod = (code:string, nameJa:string, nameEn:string)=>{
+        if(!mItems.some((m:any)=> m.code===code)) mItems = [...mItems, { code, nameJa, nameEn, active: true }]
+      }
+      ensureMethod('KATSUGI','かつぎ','Katsugi')
+      ensureMethod('ATOUCHI','後打ち','Ato-uchi')
       const pItems = json.data.listPositionMasters.items
       setMasters({ targets: tItems, methods: mItems, positions: pItems })
       const tMap: Record<string,string> = {}; for(const t of tItems) tMap[t.code]=t.nameJa
       const mMap: Record<string,string> = {}; for(const m of mItems) mMap[m.code]=m.nameJa ?? m.nameEn ?? m.code
       const pMap: Record<string,string> = {}; for(const p of pItems) pMap[p.code]=p.nameJa
       setLabelJa({ target: tMap, method: mMap, position: pMap })
+      const tpItems = (json.data.listTournamentMasters?.items ?? []) as any[]
+      const tpMap: Record<string,string> = {}
+      for (const tp of tpItems) { if (tp?.name && tp?.youtubePlaylist) tpMap[tp.name] = tp.youtubePlaylist }
+      setTournamentPlaylists(tpMap)
       // players
       let nextToken: string | null = null
       const map: Record<string,string> = {}
@@ -316,11 +338,20 @@ export default function App() {
                   labelJa={labelJa}
                   masters={{ targets: masters.targets as any, methods: masters.methods as any }}
                   homeUniversityId={homeUniversityId}
+                  apiUrl={apiUrl}
+                  getToken={getToken}
+                  tournamentPlaylists={tournamentPlaylists}
+                  // Optional Bedrock API (Amplify REST)
+                  aiUrl={aiUrl}
                 />
               ) : (
                 <TeamDashboard
                   matches={matches as any}
                   universities={universities}
+                  apiUrl={apiUrl}
+                  getToken={getToken}
+                  tournamentPlaylists={tournamentPlaylists}
+                  players={players}
                   labelJa={labelJa}
                   homeUniversityId={homeUniversityId}
                 />
@@ -333,6 +364,20 @@ export default function App() {
     </Authenticator>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

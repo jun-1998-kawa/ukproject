@@ -1,0 +1,61 @@
+          {/* Match-level W/L/D and tournament ranking */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.matchSummary') || '試合結果'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{t('dashboard.tournament')||'大会'}</TableCell>
+                  <TableCell as="th">{t('dashboard.teamWins')||'チーム勝ち'}</TableCell>
+                  <TableCell as="th">{t('dashboard.oppWins')||'相手勝ち'}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')||'引分'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '結果' : 'Result'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(matchStats?.rows||[]).map(r=> (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      {r.tournament}
+                      {r.tournament && ytMap[r.tournament] && (
+                        <a href={ytMap[r.tournament]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>
+                      )}
+                    </TableCell>
+                    <TableCell>{r.teamWins}</TableCell>
+                    <TableCell>{r.oppWins}</TableCell>
+                    <TableCell>{r.draws}</TableCell>
+                    <TableCell>{r.result}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.tournamentRanking') || '大会ランキング'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">#</TableCell>
+                  <TableCell as="th">{t('dashboard.tournament')||'大会'}</TableCell>
+                  <TableCell as="th">{t('dashboard.matches')||'試合数'}</TableCell>
+                  <TableCell as="th">{t('dashboard.wins')||'勝'}</TableCell>
+                  <TableCell as="th">{t('dashboard.losses')||'敗'}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')||'分'}</TableCell>
+                  <TableCell as="th">{t('dashboard.winRate')||'勝率'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(matchStats?.ranking||[]).map((r, i)=> (
+                  <TableRow key={r.name+String(i)}>
+                    <TableCell>{i+1}</TableCell>
+                    <TableCell>
+                      {r.name}
+                      {r.name && ytMap[r.name] && (
+                        <a href={ytMap[r.name]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>
+                      )}
+                    </TableCell>
+                    <TableCell>{r.matches}</TableCell>
+                    <TableCell>{r.wins}</TableCell>

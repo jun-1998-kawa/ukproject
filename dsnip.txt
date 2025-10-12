@@ -1,0 +1,36 @@
+        if(!isLeft && !isRight) continue
+        bouts++
+        const oppId = isLeft ? b.opponentPlayerId : b.ourPlayerId
+        const opp = (vs[oppId] ||= { bouts:0, wins:0, losses:0, draws:0, pf:0, pa:0 });
+        opp.bouts++
+        if(b.winType==='DRAW'){ draws++; opp.draws++; const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++; vsStance[sk].draws++ } }
+        else if(b.winnerPlayerId){
+          const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++ }
+          if(b.winnerPlayerId===playerId){ wins++; opp.wins++; if(sk) vsStance[sk].wins++ } else { losses++; opp.losses++; if(sk) vsStance[sk].losses++ }
+        }
+        for(const p of (b.points?.items ?? [])){
+          if(p.scorerPlayerId===playerId){
+            pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
+            if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
+            const key = buildTechniqueKey(p.target||'', p.methods||[])
+              combinedAgainst[key] = (combinedAgainst[key]||0)+1
+            combinedFor[key] = (combinedFor[key]||0)+1
+            if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
+            if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
+            if(typeof p.tSec==='number') incBin(tForBins, p.tSec)
+          } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
+            pa++; opp.pa++
+            if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
+            else {
+              const key = buildTechniqueKey(p.target||'', p.methods||[])
+              combinedAgainst[key] = (combinedAgainst[key]||0)+1
+              if(p.target) targetOnlyAgainst[p.target] = (targetOnlyAgainst[p.target]||0)+1
+            }
+            if(p.recordedAt){ const hh = new Date(p.recordedAt).getHours(); if(!Number.isNaN(hh)) hoursAgainst[hh]++ }
+            if(typeof p.tSec==='number') incBin(tAgainstBins, p.tSec)
+          }
+        }
+      }
+    }
+    const avgTime = times.length ? (times.reduce((a,b)=>a+b,0)/times.length) : null
+    const winRate = bouts ? wins/bouts : 0

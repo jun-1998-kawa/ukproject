@@ -1,0 +1,33 @@
+      {!teamId && (
+        <View marginTop="0.75rem" color="#666">{t('dashboard.noData')}</View>
+      )}
+
+      {teamId && stat && (
+        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:12, minWidth:0}}>
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.stats')}</Heading>
+            <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>
+            <div>{t('dashboard.wins')}: <b>{stat.wins}</b> / {t('dashboard.losses')}: <b>{stat.losses}</b> / {t('dashboard.draws')}: <b>{stat.draws}</b></div>
+            <div>{t('dashboard.pointsFor')}: <b>{stat.pf}</b> / {t('dashboard.pointsAgainst')}: <b>{stat.pa}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
+            <div>{t('dashboard.vsHentou')||'対変刀'}: <b>{(((stat as any).vsHentou?.winRate||0)*100).toFixed(1)}%</b> <span className="muted">({(stat as any).vsHentou?.wins||0}-{(stat as any).vsHentou?.losses||0}-{(stat as any).vsHentou?.draws||0} / {(stat as any).vsHentou?.bouts||0})</span></div>
+          </View>
+
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.pieFor')}</Heading>
+            <div className="graph"><Pie items={(stat.topCombinedFor as any).map(([k,v]:[string,number])=> [labelTechniqueCombined(k), v])} /></div>
+          </View>
+
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
+            <div className="graph"><Pie items={(stat.topCombinedAgainst as any).map(([k,v]:[string,number])=> [labelTechniqueCombined(k), v])} /></div>
+          </View>
+
+          {/* 対変刀は統計カードに集約するため、このセクションは削除 */}
+
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.vsOpponents') || 'Vs Teams'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{t('dashboard.opponent') || 'Opponent'}</TableCell>

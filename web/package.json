@@ -1,29 +1,32 @@
 {
-  "name": "kendo-club-engine-web",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --port 5173",
-    "lint:i18n": "node scripts/check-i18n.cjs"
-  },
-  "dependencies": {
-    "@aws-amplify/ui-react": "^6.1.8",
-    "ag-grid-community": "^31.3.4",
-    "ag-grid-react": "^31.3.4",
-    "aws-amplify": "^6.0.0",
-    "i18next": "^25.5.2",
-    "i18next-browser-languagedetector": "^8.2.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-i18next": "^15.7.3"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.66",
-    "@types/react-dom": "^18.2.22",
-    "typescript": "^5.4.0",
-    "vite": "^5.0.0"
-  }
+    "name":  "kendo-club-engine-web",
+    "private":  true,
+    "version":  "0.1.0",
+    "type":  "module",
+    "scripts":  {
+                    "dev":  "vite",
+                    "build":  "vite build",
+                    "preview":  "vite preview --port 5173",
+                    "typecheck":  "tsc --noEmit -p tsconfig.json",
+                    "check":  "npm run typecheck \u0026\u0026 npm run build",
+                    "lint:i18n":  "node scripts/check-i18n.cjs",
+                    "backfill:boutSeq":  "node ../scripts/backfillBoutSeq.mjs"
+                },
+    "dependencies":  {
+                         "@aws-amplify/ui-react":  "^6.1.8",
+                         "ag-grid-community":  "^31.3.4",
+                         "ag-grid-react":  "^31.3.4",
+                         "aws-amplify":  "^6.0.0",
+                         "i18next":  "^25.5.2",
+                         "i18next-browser-languagedetector":  "^8.2.0",
+                         "react":  "^18.2.0",
+                         "react-dom":  "^18.2.0",
+                         "react-i18next":  "^15.7.3"
+                     },
+    "devDependencies":  {
+                            "@types/react":  "^18.2.66",
+                            "@types/react-dom":  "^18.2.22",
+                            "typescript":  "^5.4.0",
+                            "vite":  "^5.0.0"
+                        }
 }

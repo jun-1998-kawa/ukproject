@@ -1,0 +1,11 @@
+    setRows(init)
+    const m = matches.find(m=> m.id===matchId)
+    if(m){ setTournament(m.tournament ?? ''); setHeldOn(m.heldOn ?? ''); setIsOfficial((m as any).isOfficial ?? true); setOurUniversityId((m as any).ourUniversityId ?? ''); setOpponentUniversityId((m as any).opponentUniversityId ?? '') }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bouts.map(b=> b.id).join(','), matchId])
+  // Load initial YouTube URL for selected tournament from localStorage (best-effort)
+  useEffect(()=>{
+    try{
+      const raw = localStorage.getItem('yt.playlists');
+      if(raw){
+        const map = JSON.parse(raw) as Record<string,string>;

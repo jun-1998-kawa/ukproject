@@ -1,0 +1,23 @@
+        const opp = (map[oppId] ||= { pf:0, pa:0 })
+        for(const p of (b.points?.items ?? [])){
+          if(p.scorerPlayerId===myId) me.pf++
+          else if(p.scorerPlayerId===oppId) me.pa++
+        }
+      }
+    }
+    return Object.entries(map).map(([playerId, v])=> ({ playerId, name: (players && players[playerId]) || playerId, pf: v.pf, pa: v.pa }))
+      .sort((a,b)=> (b.pf - a.pf) || (a.pa - b.pa))
+  }, [matches, teamId])
+
+  // Export helpers
+  function downloadCSV(filename:string, rows: (string|number)[][]){
+    const csv = rows.map(r=> r.map(x=> typeof x==='string' && (x.includes(',')||x.includes('"')||x.includes('
+')) ? '"'+x.replace(/"/g,'""')+'"' : String(x)).join(',')).join('
+')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url)
+  }
+  function exportPlayers(){
+    const header = [t('dashboard.player')||'Player', t('dashboard.pointsFor')||'PF', t('dashboard.pointsAgainst')||'PA']
+    const rows = playerContrib.map(p=> [p.name, p.pf, p.pa])

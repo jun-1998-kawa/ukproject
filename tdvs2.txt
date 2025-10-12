@@ -1,0 +1,41 @@
+                  <TableCell as="th">{t('dashboard.opponent') || 'Opponent'}</TableCell>
+                  <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+                  <TableCell as="th">{t('dashboard.wins')}</TableCell>
+                  <TableCell as="th">{t('dashboard.losses')}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+                  <TableCell as="th">??</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(stat.vsTop as any).map(([oppId, v]:[string, any])=> (
+                  <TableRow key={oppId}>
+                    <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
+                    <TableCell>{v.bouts}</TableCell>
+                    <TableCell>{v.wins}</TableCell>
+                    <TableCell>{v.losses}</TableCell>
+                    <TableCell>{v.draws}</TableCell>
+                    <TableCell>{v.pf}</TableCell>
+                    <TableCell>{v.pa}</TableCell>
+                    <TableCell>{(noteCountByOpponent[oppId]||0)>0 ? `?? ${(noteCountByOpponent[oppId]||0)}` : ''}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
+          {/* Match-level W/L/D and tournament ranking */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.matchSummary') || '‡Œ‹‰Ê'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{t('dashboard.tournament')||'‘å‰ï'}</TableCell>
+                  <TableCell as="th">{t('dashboard.teamWins')||'ƒ`[ƒ€Ÿ‚¿'}</TableCell>
+                  <TableCell as="th">{t('dashboard.oppWins')||'‘ŠèŸ‚¿'}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')||'ˆø•ª'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? 'Œ‹‰Ê' : 'Result'}</TableCell>
+                </TableRow>

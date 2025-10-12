@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
 import ChatSummaryModal from './ChatSummaryModal'
 
 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
-type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
+type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null; recordedAt?: string | null }
 
 type Master = { code: string; nameJa?: string; nameEn?: string }
 
@@ -15,6 +15,10 @@ export default function Dashboard(props:{
   masters: { targets: Master[]; methods: Master[] }
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
+  apiUrl?: string
+  getToken?: ()=> Promise<string|null>
+  tournamentPlaylists?: Record<string,string>
+  aiUrl?: string | undefined
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
@@ -22,11 +26,27 @@ export default function Dashboard(props:{
   const [from, setFrom] = useState<string>('')
   const [to, setTo] = useState<string>('')
   const [tournamentFilter, setTournamentFilter] = useState<string>('')
-  const [topN, setTopN] = useState<number>(5)
+  const [granularity, setGranularity] = useState<'target'|'technique'>('technique')
+  const TOP_N = 5
+  const BIN_SIZE_SEC = 15
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
   const [aiOpen, setAiOpen] = useState<boolean>(false)
 
-  const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
+  function gradeLabel(g?: number|null){ return (typeof g==='number' && g>0 && g<10) ? `${g}年` : '' }
+  const typeaheadItems: TypeaheadItem[] = useMemo(()=>{
+    if(playersLite && universities){
+      return playersLite.map(p=>{
+        const uni = universities.find(u=> u.id===p.universityId)
+        const uniLabel = uni?.shortName || uni?.name || ''
+        const gl = gradeLabel(p.grade)
+        const label = [p.name, uniLabel, gl].filter(Boolean).join(' ')
+        const searchKey = [p.name, p.nameKana||'', uniLabel, gl].join(' ')
+        return { id: p.id, label, searchKey }
+      }).sort((a,b)=> a.label.localeCompare(b.label,'ja'))
+    }
+    // Fallback to simple map
+    return Object.entries(players).map(([id,name])=> ({ id, label: name })).sort((a,b)=> a.label.localeCompare(b.label,'ja'))
+  }, [playersLite, universities, players])
 
   // Persist filter in localStorage (share same key with App to keep consistent)
   useEffect(()=>{
@@ -36,6 +56,74 @@ export default function Dashboard(props:{
     }catch{}
   },[])
   useEffect(()=>{ try{ localStorage.setItem('filters:type', officialFilter) }catch{} }, [officialFilter])
+  // Fetch qualitative notes for selected player
+  useEffect(()=>{
+    (async()=>{
+      setNotes([])
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
+
+  const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
+  const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
+  const getPlayerQuery = `query GetPlayer($id:ID!){ getPlayer(id:$id){ id notes } }`
+  const updatePlayerMut = `mutation UpdatePlayer($input: UpdatePlayerInput!){ updatePlayer(input:$input){ id } }`
+
+  function playerMatches(){
+    if(!playerId) return [] as Match[]
+    const arr: Match[] = []
+    for(const m of matches){
+      const has = (m.bouts?.items ?? []).some(b=> b.ourPlayerId===playerId || b.opponentPlayerId===playerId)
+      if(has) arr.push(m)
+    }
+    return arr
+  }
+
+  // Load/save overall player analysis (Player.notes)
+  useEffect(()=>{
+    (async()=>{
+      setOverallNote('')
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: getPlayerQuery, variables: { id: playerId } }) })
+        const j:any = await res.json(); const p = j?.data?.getPlayer
+        setOverallNote(p?.notes || '')
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
+
+  async function saveOverall(){
+    if(!props.apiUrl || !props.getToken || !playerId) return
+    setOverallSaving(true)
+    try{
+      const token = await props.getToken(); if(!token) return
+      const input:any = { id: playerId, notes: (overallNote||'').trim() }
+      await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updatePlayerMut, variables: { input } }) })
+    }catch{}
+    finally{ setOverallSaving(false) }
+  }
+  // Fetch qualitative notes for selected player
+  useEffect(()=>{
+    (async()=>{
+      setNotes([])
+      if(!props.apiUrl || !props.getToken || !playerId) return
+      try{
+        const token = await props.getToken(); if(!token) return
+        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
+        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
+        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
+        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
+      }catch{}
+    })()
+  }, [playerId, props.apiUrl, props.getToken])
 
   const stat = useMemo(()=>{
     if(!playerId) return null
@@ -51,9 +139,19 @@ export default function Dashboard(props:{
     })
     const combinedFor: Record<string, number> = {}
     const combinedAgainst: Record<string, number> = {}
+    const targetOnlyFor: Record<string, number> = {}
+    const targetOnlyAgainst: Record<string, number> = {}
     const vs: Record<string, { bouts:number; wins:number; losses:number; draws:number; pf:number; pa:number }> = {}
     let wins=0, losses=0, draws=0, bouts=0, pf=0, pa=0
     const times:number[]=[]
+    const hoursFor = new Array(24).fill(0)
+    const hoursAgainst = new Array(24).fill(0)
+    // time-in-bout bins by seconds
+    const tForBins: number[] = []
+    const tAgainstBins: number[] = []
+    const incBin = (arr:number[], t:number)=>{ const idx = Math.floor(Math.max(0,t)/Math.max(1,BIN_SIZE_SEC)); arr[idx] = (arr[idx]||0)+1 }
+    const stanceKey = (s?:string|null)=> s==='JODAN' ? 'JODAN' : ((s||'').startsWith('NITOU') ? 'NITOU' : '')
+    const vsStance: Record<string, { bouts:number; wins:number; losses:number; draws:number }> = { JODAN:{bouts:0,wins:0,losses:0,draws:0}, NITOU:{bouts:0,wins:0,losses:0,draws:0} }
 
     for(const m of filtered){
       for(const b of (m.bouts?.items ?? [])){
@@ -64,9 +162,10 @@ export default function Dashboard(props:{
         const oppId = isLeft ? b.opponentPlayerId : b.ourPlayerId
         const opp = (vs[oppId] ||= { bouts:0, wins:0, losses:0, draws:0, pf:0, pa:0 });
         opp.bouts++
-        if(b.winType==='DRAW'){ draws++; opp.draws++ }
+        if(b.winType==='DRAW'){ draws++; opp.draws++; const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++; vsStance[sk].draws++ } }
         else if(b.winnerPlayerId){
-          if(b.winnerPlayerId===playerId){ wins++; opp.wins++ } else { losses++; opp.losses++ }
+          const sk = stanceKey(isLeft ? (b as any).opponentStance : (b as any).ourStance); if(sk){ vsStance[sk].bouts++ }
+          if(b.winnerPlayerId===playerId){ wins++; opp.wins++; if(sk) vsStance[sk].wins++ } else { losses++; opp.losses++; if(sk) vsStance[sk].losses++ }
         }
         for(const p of (b.points?.items ?? [])){
           if(p.scorerPlayerId===playerId){
@@ -74,10 +173,19 @@ export default function Dashboard(props:{
             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
             const key = buildTechniqueKey(p.target||'', p.methods||[])
             combinedFor[key] = (combinedFor[key]||0)+1
+            if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
+            if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
+            if(typeof p.tSec==='number') incBin(tForBins, p.tSec)
           } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
             pa++; opp.pa++
             if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
-            else { const key = buildTechniqueKey(p.target||'', p.methods||[]); combinedAgainst[key] = (combinedAgainst[key]||0)+1 }
+            else {
+              const key = buildTechniqueKey(p.target||'', p.methods||[])
+              combinedAgainst[key] = (combinedAgainst[key]||0)+1
+              if(p.target) targetOnlyAgainst[p.target] = (targetOnlyAgainst[p.target]||0)+1
+            }
+            if(p.recordedAt){ const hh = new Date(p.recordedAt).getHours(); if(!Number.isNaN(hh)) hoursAgainst[hh]++ }
+            if(typeof p.tSec==='number') incBin(tAgainstBins, p.tSec)
           }
         }
       }
@@ -89,44 +197,65 @@ export default function Dashboard(props:{
     const slowest = times.length ? Math.max(...times) : null
     const ppg = bouts ? pf / bouts : 0
     const diff = pf - pa
-    const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, topN)
-    const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
-    return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst, vsTop }
-  }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter, homeUniversityId])
+    const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+    const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+    const topTargetFor = Object.entries(targetOnlyFor).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+    const topTargetAgainst = Object.entries(targetOnlyAgainst).sort((a,b)=> b[1]-a[1]).slice(0, TOP_N)
+    const vsHentou = (()=>{ const j=vsStance.JODAN, n=vsStance.NITOU; const b=j.bouts+n.bouts, w=j.wins+n.wins, l=j.losses+n.losses, d=j.draws+n.draws; return { bouts:b, wins:w, losses:l, draws:d, winRate: b? (w/b): 0 } })()
+    return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst, topTargetFor, topTargetAgainst, vsTop, hoursFor, hoursAgainst, tForBins, tAgainstBins, vsStance, vsHentou }
+  }, [matches, playerId, from, to, tournamentFilter, officialFilter, homeUniversityId])
 
   function labelTarget(code:string){ return labelJa.target[code] ?? code }
   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
-  function buildTechniqueKey(target?:string, methods?:string[]){ const mm = (methods||[]).slice().sort(); return `${target||''}:${mm.join('+')}` }
-  function labelTechniqueCombined(key:string){ if(key==='HANSOKU') return t('winType.HANSOKU'); const [target, mstr] = key.split(':'); const ml = (mstr? mstr.split('+') : []).map(labelMethod); const base = ml.join(''); return `${base}${labelTarget(target)}` }
+  function buildTechniqueKey(target?: string|null, methods?: string[]|null){
+    const mm = methods ?? []
+    return `${target||''}:${mm.join('+')}`
+  }
+  function labelTechnique(targetCode?: string|null, methods?: string[]|null){
+    if(!targetCode) return '-'
+    const tlabel = labelJa.target[targetCode] ?? targetCode
+    const mm = methods ?? []
+    if(mm.length===0) return tlabel
+    return mm.map(m=> `${labelJa.method[m] ?? m}${tlabel}`).join(' / ')
+  }
 
-  function PieChart({items, size=160}:{ items: [string, number][], size?:number }){
+  function PieChart({items, size=140}:{ items: [string, number][], size?:number }){
     const total = items.reduce((s, [,v])=> s+v, 0)
     if(total<=0) return <div>-</div>
     const r = size/2, cx=r, cy=r
+    const nonZeroIdx = items.findIndex(([,v])=> v>0)
+    if(items.filter(([,v])=> v>0).length===1 && nonZeroIdx>=0){
+      const color = PALETTE[nonZeroIdx % PALETTE.length]
+      return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={cx} cy={cy} r={r} fill={color} />
+        </svg>
+      )
+    }
     let acc = 0
-    const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
-    const paths = items.map(([label,v],i)=>{
+    const paths = items.map(([,v],i)=>{
       const a0 = (acc/total)*2*Math.PI; acc += v; const a1 = (acc/total)*2*Math.PI
       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
-      return (<path key={i} d={d} fill={palette[i%palette.length]} stroke="#fff" strokeWidth={1} />)
+      return (<path key={i} d={d} fill={PALETTE[i%PALETTE.length]} stroke="#fff" strokeWidth={1} />)
     })
-    return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>
-    )
+    return (<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>)
   }
 
   return (
-    <View>
+    <View className="min-w-0">
       <Heading level={4}>{t('dashboard.title')}</Heading>
       <View marginTop="0.5rem">
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
-          <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="18rem">
-            <option value="">--</option>
-            {playerList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
-          </SelectField>
+          <div>
+            <label style={{ fontSize:12, color:'#444' }}>{t('dashboard.selectPlayer')}</label>
+            <Typeahead value={playerId} onChange={setPlayerId} items={typeaheadItems} width={'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
+          </div>
+          <div className="no-print" style={{ display:'flex', alignItems:'center' }}>
+            <Button size="small" onClick={()=> setAiOpen(true)} isDisabled={!playerId}>🤖 {t('ai.summary') || 'AI要約'}</Button>
+          </div>
           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
           <div className="no-print" style={{ display:'flex', alignItems:'center' }}>
@@ -139,10 +268,12 @@ export default function Dashboard(props:{
             <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
           </SelectField>
           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
-          <SelectField label={t('dashboard.topN')} value={String(topN)} onChange={e=> setTopN(Number(e.target.value))} size="small" width="10rem">
-            {[5,10,15].map(n=> (<option key={n} value={n}>{n}</option>))}
+          {(()=>{ const tname=tournamentFilter.trim(); const url=tname? props.tournamentPlaylists?.[tname]: undefined; return url? (<a href={url} target="_blank" rel="noopener noreferrer" title="YouTube" style={{ marginLeft:-6, transform:'translateY(6px)' }}>▶</a>) : null })()}
+          <SelectField label={t('dashboard.granularity')||'Granularity'} value={granularity} onChange={e=> setGranularity(e.target.value as any)} size="small" width="12rem">
+            <option value="technique">{t('dashboard.gran.technique')||'Technique x Target'}</option>
+            <option value="target">{t('dashboard.gran.target')||'Target only'}</option>
           </SelectField>
-          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all') }}>{t('dashboard.clear')}</Button>
+          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setOfficialFilter('all') }}>{t('dashboard.clear')}</Button>
         </Flex>
       </View>
 
@@ -151,8 +282,8 @@ export default function Dashboard(props:{
       )}
 
       {playerId && stat && (
-        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
-          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(0,1fr))', gap:12, minWidth:0}}>
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
             <Heading level={6}>{t('dashboard.stats')}</Heading>
             <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : (officialFilter==='practice' ? t('filters.practice') : (t('filters.intra')||'Intra-squad'))}</b></div>
             <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>
@@ -162,20 +293,73 @@ export default function Dashboard(props:{
             <div>{t('dashboard.avgTimeToScore')}: <b>{stat.avgTime==null?'-':stat.avgTime.toFixed(1)+'s'}</b></div>
             <div>{t('dashboard.fastest')}: <b>{stat.fastest==null?'-':stat.fastest+'s'}</b> / {t('dashboard.slowest')}: <b>{stat.slowest==null?'-':stat.slowest+'s'}</b></div>
             <div>{t('dashboard.pointsPerBout')}: <b>{stat.ppg.toFixed(2)}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
+            <div>{t('dashboard.vsHentou')||'対変刀'}: <b>{(((stat as any).vsHentou?.winRate||0)*100).toFixed(1)}%</b> <span className="muted">({(stat as any).vsHentou?.wins||0}-{(stat as any).vsHentou?.losses||0}-{(stat as any).vsHentou?.draws||0} / {(stat as any).vsHentou?.bouts||0})</span></div>
           </View>
 
-          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
             <Heading level={6}>{t('dashboard.pieFor')}</Heading>
-            <PieChart items={stat.topCombinedFor as any} />
-          </View>
+            <div className="graph">
+              <PieChart items={(granularity==='technique' ? stat.topCombinedFor : (stat as any).topTargetFor) as any} />
+            </div>
+            <Legend items={(granularity==='technique' ? stat.topCombinedFor : (stat as any).topTargetFor) as any} labelJa={labelJa} />
 
-          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+          </View>
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
             <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
-            <PieChart items={stat.topCombinedAgainst as any} />
+            <div className="graph">
+              <PieChart items={(granularity==='technique' ? stat.topCombinedAgainst : (stat as any).topTargetAgainst) as any} />
+            </div>
+            <Legend items={(granularity==='technique' ? stat.topCombinedAgainst : (stat as any).topTargetAgainst) as any} labelJa={labelJa} />
           </View>
 
-          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+          </View>
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.vsStance') || '対変刀勝率'}</Heading>
+            <View className="table-wrap">
+              <Table variation="bordered" highlightOnHover>
+                <TableHead>
+                  <TableRow>
+                    <TableCell as="th">{t('stance.stance')||'構え'}</TableCell>
+                    <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+                    <TableCell as="th">{t('dashboard.wins')}</TableCell>
+                    <TableCell as="th">{t('dashboard.losses')}</TableCell>
+                    <TableCell as="th">{t('dashboard.draws')}</TableCell>
+                    <TableCell as="th">{t('dashboard.winRate')||'Win %'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(()=>{ const s=(stat as any).vsStance?.JODAN||{bouts:0,wins:0,losses:0,draws:0}; const wr=s.bouts? (s.wins/s.bouts*100).toFixed(1)+'%':'-'; return (
+                    <TableRow>
+                      <TableCell>{t('stance.JODAN')||'上段'}</TableCell>
+                      <TableCell>{s.bouts}</TableCell>
+                      <TableCell>{s.wins}</TableCell>
+                      <TableCell>{s.losses}</TableCell>
+                      <TableCell>{s.draws}</TableCell>
+                      <TableCell>{wr}</TableCell>
+                    </TableRow>
+                  )})()}
+                  {(()=>{ const s=(stat as any).vsStance?.NITOU||{bouts:0,wins:0,losses:0,draws:0}; const wr=s.bouts? (s.wins/s.bouts*100).toFixed(1)+'%':'-'; return (
+                    <TableRow>
+                      <TableCell>{t('stance.NITOU')||'二刀'}</TableCell>
+                      <TableCell>{s.bouts}</TableCell>
+                      <TableCell>{s.wins}</TableCell>
+                      <TableCell>{s.losses}</TableCell>
+                      <TableCell>{s.draws}</TableCell>
+                      <TableCell>{wr}</TableCell>
+                    </TableRow>
+                  )})()}
+                </TableBody>
+              </Table>
+            </View>
+          </View>
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden', marginBottom:12}}>
+              <Heading level={6}>{t('dashboard.timeInBout') || '経過秒分布'}</Heading>
+              <TimeInBoutHistogram binsFor={(stat as any).tForBins} binsAgainst={(stat as any).tAgainstBins} binSizeSec={BIN_SIZE_SEC} />
+            </View>
             <Heading level={6}>{t('dashboard.vsOpponents')}</Heading>
+            <View className="table-wrap">
             <Table variation="bordered" highlightOnHover>
               <TableHead>
                 <TableRow>
@@ -186,22 +370,85 @@ export default function Dashboard(props:{
                   <TableCell as="th">{t('dashboard.draws')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+                  <TableCell as="th">💬</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stat.vsTop.map(([oppId, v])=> (
-                  <TableRow key={oppId}>
-                    <TableCell>{players[oppId] ?? oppId}</TableCell>
-                    <TableCell>{v.bouts}</TableCell>
-                    <TableCell>{v.wins}</TableCell>
-                    <TableCell>{v.losses}</TableCell>
-                    <TableCell>{v.draws}</TableCell>
-                    <TableCell>{v.pf}</TableCell>
-                    <TableCell>{v.pa}</TableCell>
-                  </TableRow>
-                ))}
+                {stat.vsTop.map(([oppId, v])=> {
+                  // count notes for this opponent across matches for selected player
+                  let c = 0
+                  for(const n of notes){
+                    const m = matches.find(mm=> mm.id===n.matchId)
+                    if(!m) continue
+                    for(const b of (m.bouts?.items ?? [])){
+                      const isLeft = b.ourPlayerId===playerId
+                      const isRight = b.opponentPlayerId===playerId
+                      if(!isLeft && !isRight) continue
+                      const thisOpp = isLeft ? b.opponentPlayerId : b.ourPlayerId
+                      if(thisOpp===oppId){ c++; break }
+                    }
+                  }
+                  return (
+                    <TableRow key={oppId}>
+                      <TableCell>{players[oppId] ?? oppId}</TableCell>
+                      <TableCell>{v.bouts}</TableCell>
+                      <TableCell>{v.wins}</TableCell>
+                      <TableCell>{v.losses}</TableCell>
+                      <TableCell>{v.draws}</TableCell>
+                      <TableCell>{v.pf}</TableCell>
+                      <TableCell>{v.pa}</TableCell>
+                      <TableCell>{c>0 ? `💬 ${c}` : ''}</TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
+            </View>
+          </View>
+          {/* Player overall analysis (per player, not per match) */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('analysis.overallTitle')||'選手全体分析'}</Heading>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:8, marginTop:8 }}>
+              <textarea rows={4} value={overallNote} onChange={(e)=> setOverallNote(e.target.value)} placeholder={t('analysis.overallPh')||'選手全体の所感・課題・方針など'} style={{ width:'100%', fontSize:13, padding:'6px 8px' }} />
+              <div className="no-print" style={{ display:'flex', justifyContent:'flex-end' }}>
+                <Button size="small" onClick={saveOverall} isLoading={overallSaving} isDisabled={!playerId}>{t('actions.save')||'保存'}</Button>
+              </div>
+            </div>
+          </View>
+
+          {/* Player qualitative analysis (per match) */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('analysis.playerNotes')||'選手分析'}</Heading>
+            {notes.length===0 ? (
+              <div className="muted" style={{ fontSize:12 }}>{t('analysis.noNotes')||'コメントはありません'}</div>
+            ) : (
+              <View className="table-wrap">
+                <Table variation="bordered" highlightOnHover>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell as="th">{t('labels.match')||'試合/日付'}</TableCell>
+                      <TableCell as="th">{t('analysis.comment')||'コメント'}</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {notes.map((n,i)=>{
+                      const m = matches.find(mm=> mm.id===n.matchId)
+                      const title = m ? `${(m as any).heldOn||''} ${(m as any).tournament||''}` : n.matchId
+                      const yurl = m && (m as any).tournament ? (props.tournamentPlaylists?.[(m as any).tournament] || '') : ''
+                      return (
+                        <TableRow key={n.matchId+String(i)}>
+                          <TableCell>
+                            {title}
+                            {yurl && (<a href={yurl} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>▶</a>)}
+                          </TableCell>
+                          <TableCell>{n.comment}</TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </View>
+            )}
           </View>
         </View>
       )}
