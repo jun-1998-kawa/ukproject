@@ -6,7 +6,8 @@ backend:
         - node -v && npm -v
         - npm ci --cache .npm --prefer-offline
         - |
-          set -euo pipefail
+          # Avoid `set -u` which leaks into later phases and breaks RVM
+          set -eo pipefail
           echo "[backend] AWS_BRANCH=${AWS_BRANCH}"
           echo "[backend] BACKEND_APP_ID=${BACKEND_APP_ID:-} AMPLIFY_APP_ID=${AMPLIFY_APP_ID:-} AWS_APP_ID=${AWS_APP_ID:-}"
           npx ampx --version || true
@@ -23,6 +24,8 @@ backend:
           else
             npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
           fi
+          # Reset any strict flags to avoid impacting frontend phases
+          set +u || true
   artifacts:
     baseDirectory: .
     files:
