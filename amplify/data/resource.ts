@@ -25,14 +25,14 @@ const schema = a.schema({
     .arguments({ payload: a.json().required() })
     .returns(a.ref("AiResponse"))
     .authorization((allow)=>[
-      allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["read"]),
+      allow.groups(["ADMINS","COACHES","ANALYSTS"]),
     ])
     .handler(a.handler.function(aiCoach)),
   aiAsk: a.mutation()
     .arguments({ input: a.ref("AiAskInput").required() })
     .returns(a.ref("AiResponse"))
     .authorization((allow)=>[
-      allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["read"]),
+      allow.groups(["ADMINS","COACHES","ANALYSTS"]),
     ])
     .handler(a.handler.function(aiCoach)),
   University: a.model({
