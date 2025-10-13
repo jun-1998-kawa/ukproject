@@ -36,6 +36,14 @@ frontend:
       commands:
         - . ~/.nvm/nvm.sh || true; nvm install 20 && nvm use 20
         - node -v && npm -v
+        - |
+          if [ -f amplify_outputs.json ]; then
+            mkdir -p web/src
+            cp -f amplify_outputs.json web/src/amplify_outputs.json
+            echo "[frontend] Copied amplify_outputs.json to web/src"
+          else
+            echo "[frontend] amplify_outputs.json not found (backend phase may have failed)"; exit 1
+          fi
         - npm ci --prefix web --cache .npm --prefer-offline
     build:
       commands:

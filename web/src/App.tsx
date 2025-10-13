@@ -12,7 +12,7 @@ import UniversitiesAdmin from './components/UniversitiesAdmin'
 import Dashboard from './components/Dashboard'
 import TeamDashboard from './components/TeamDashboard'
 
-import outputs from '../../amplify_outputs.json'
+import outputs from './amplify_outputs.json'
 
 Amplify.configure(outputs)
 
