@@ -16,10 +16,7 @@ backend:
           else APP_ID="${AWS_APP_ID:-}"; fi
           if [ -z "$APP_ID" ]; then echo "APP_ID unresolved. Set BACKEND_APP_ID in env vars."; exit 1; fi
           # Deploy backend (show errors)
-          if ! npx ampx pipeline-deploy --verbose --app-id "$APP_ID" --branch "$AWS_BRANCH"; then
-            echo "[backend] pipeline-deploy failed; trying 'ampx push'..."
-            npx ampx push --verbose --app-id "$APP_ID" --branch "$AWS_BRANCH"
-          fi
+          npx ampx pipeline-deploy --debug --app-id "$APP_ID" --branch "$AWS_BRANCH"
           # If outputs already written by deploy, skip. Otherwise generate via app-id/branch
           if [ -s amplify_outputs.json ]; then
             echo "[backend] amplify_outputs.json already present"
