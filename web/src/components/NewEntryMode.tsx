@@ -157,8 +157,8 @@ export default function NewEntryMode(props: {
     { code:'HIDARI', nameJa:'左', nameEn:'Left' },
     { code:'AIKOTE', nameJa:'相小手', nameEn:'Aikote' },
   ]
-  const safeTargets2 = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets
-  const safeMethods2 = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods
+  const safeTargets2 = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets2
+  const safeMethods2 = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods2
   const [focusBoutId, setFocusBoutId] = useState<string>('')
   const [allowEncho, setAllowEncho] = useState<boolean>(true)
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
@@ -544,6 +544,7 @@ export default function NewEntryMode(props: {
     </>
   )
 }
+
 
 
 
