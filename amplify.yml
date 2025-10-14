@@ -1,35 +1,37 @@
-version: 1
+﻿version: 1
 backend:
   phases:
     build:
       commands:
+        - . ~/.nvm/nvm.sh || true; nvm install 20 && nvm use 20
         - node -v && npm -v
         - npm ci --cache .npm --prefer-offline
         - |
-          # Avoid `set -u` which leaks into later phases and breaks RVM
           set -eo pipefail
-          echo "[backend] AWS_BRANCH=${AWS_BRANCH}"
-          echo "[backend] BACKEND_APP_ID=${BACKEND_APP_ID:-} AMPLIFY_APP_ID=${AMPLIFY_APP_ID:-} AWS_APP_ID=${AWS_APP_ID:-}"
-          npx ampx --version || true
+          echo "[backend] START branch=${AWS_BRANCH} region=${AWS_REGION}"
+          echo "[backend] APP_IDS BACKEND_APP_ID=${BACKEND_APP_ID:-} AMPLIFY_APP_ID=${AMPLIFY_APP_ID:-} AWS_APP_ID=${AWS_APP_ID:-}"
+          AMPX_PKG="@aws-amplify/backend-cli@latest"
+          npx -y "$AMPX_PKG" --version || true
           # Resolve App ID (prefer explicit BACKEND_APP_ID)
           if [ -n "${BACKEND_APP_ID:-}" ]; then APP_ID="$BACKEND_APP_ID";
           elif [ -n "${AMPLIFY_APP_ID:-}" ]; then APP_ID="$AMPLIFY_APP_ID";
           else APP_ID="${AWS_APP_ID:-}"; fi
-          if [ -z "$APP_ID" ]; then echo "APP_ID unresolved. Set BACKEND_APP_ID in env vars."; exit 1; fi
-          # Deploy backend (show errors)
-          npx ampx pipeline-deploy --debug --app-id "$APP_ID" --branch "$AWS_BRANCH"
+          if [ -z "$APP_ID" ]; then echo "[backend] APP_ID unresolved. Set BACKEND_APP_ID in env vars."; exit 1; fi
+          # Deploy backend (debug mode)
+          npx -y "$AMPX_PKG" pipeline-deploy --debug --app-id "$APP_ID" --branch "$AWS_BRANCH"
           # If outputs already written by deploy, skip. Otherwise generate via app-id/branch
           if [ -s amplify_outputs.json ]; then
-            echo "[backend] amplify_outputs.json already present"
+            echo "[backend] amplify_outputs.json present after pipeline-deploy"
           else
-            npx ampx generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
+            npx -y "$AMPX_PKG" generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir .
           fi
           # Make frontend-consumable copy under web/src for Vite build
           mkdir -p web/src
           cp -f amplify_outputs.json web/src/amplify_outputs.json
-          echo "[backend] Copied amplify_outputs.json -> web/src/amplify_outputs.json"
+          echo "[backend] Copied amplify_outputs.json -> web/src"
           # Reset any strict flags to avoid impacting frontend phases
           set +u || true
+          echo "[backend] END"
   artifacts:
     baseDirectory: .
     files:
@@ -41,10 +43,31 @@ frontend:
         - . ~/.nvm/nvm.sh || true; nvm install 20 && nvm use 20
         - node -v && npm -v
         - |
+          set -eo pipefail
           if [ -f web/src/amplify_outputs.json ]; then
             echo "[frontend] amplify_outputs.json already present in web/src"
           else
-            echo "[frontend] amplify_outputs.json missing in web/src"; ls -la; ls -la web || true; exit 1
+            echo "[frontend] amplify_outputs.json missing; attempting to generate via ampx"
+            # Resolve APP_ID (prefer explicit BACKEND_APP_ID)
+            if [ -n "${BACKEND_APP_ID:-}" ]; then APP_ID="$BACKEND_APP_ID";
+            elif [ -n "${AMPLIFY_APP_ID:-}" ]; then APP_ID="$AMPLIFY_APP_ID";
+            else APP_ID="${AWS_APP_ID:-}"; fi
+            if [ -z "$APP_ID" ]; then
+              echo "[frontend] APP_ID unresolved (set BACKEND_APP_ID or AMPLIFY_APP_ID).";
+            else
+              echo "[frontend] Using APP_ID=$APP_ID, branch=$AWS_BRANCH to generate outputs"
+              AMPX_PKG="@aws-amplify/backend-cli@latest"
+              npx -y "$AMPX_PKG" --version || true
+              npx -y "$AMPX_PKG" generate outputs --app-id "$APP_ID" --branch "$AWS_BRANCH" --outputs-version 1.4 --out-dir web/src || {
+                echo "[frontend] ampx generate outputs failed"; exit 1;
+              }
+            fi
+          fi
+          # Final check after potential generation
+          if [ -f web/src/amplify_outputs.json ]; then
+            echo "[frontend] amplify_outputs.json ready"
+          else
+            echo "[frontend] amplify_outputs.json still missing. Showing layout then exiting."; ls -la; ls -la web || true; exit 1
           fi
         - npm ci --prefix web --cache .npm --prefer-offline
     build:
