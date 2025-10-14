@@ -1,4 +1,4 @@
-Ôªøimport { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import '@aws-amplify/ui-react/styles.css'
 import { Amplify } from 'aws-amplify'
 import { Authenticator, View, Heading, Button, Table, TableHead, TableRow, TableCell, TableBody, Badge, Flex, SelectField, TextField, RadioGroupField, Radio, CheckboxField, Alert } from '@aws-amplify/ui-react'
@@ -12,15 +12,15 @@ import UniversitiesAdmin from './components/UniversitiesAdmin'
 import Dashboard from './components/Dashboard'
 import TeamDashboard from './components/TeamDashboard'
 
-import outputs from './amplify_outputs.json'
+import outputs from '../../amplify_outputs.json'
 
 Amplify.configure(outputs)
 
 type Match = { id: string; heldOn: string; createdAt?: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
-type Bout = { id: string; createdAt?: string; seq?: number; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
 type Point = { id?: string; tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
 
-const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id createdAt seq ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement recordedAt } } } } } nextToken } }`
+const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement recordedAt } } } } } nextToken } }`
 const listUniversitiesHome = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id isHome } nextToken } }`
 const listUniversitiesNames = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName isHome } nextToken } }`
 const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } listTournamentMasters { items { name shortName youtubePlaylist active } } }`
@@ -181,18 +181,18 @@ export default function App() {
       let mItems = json.data.listMethodMasters.items
       // Append client-side extra method modifiers if missing
       const extraMethods = [
-        { code: 'GYAKU', nameJa: 'ÈÄÜ', nameEn: 'Gyaku' },
-        { code: 'HIDARI', nameJa: 'Â∑¶', nameEn: 'Left' },
-        { code: 'TOBIKOMI', nameJa: 'È£õ„Å≥Ëæº„Åø', nameEn: 'Tobikomi' },
-        { code: 'AIKOTE', nameJa: 'Áõ∏Â∞èÊâã', nameEn: 'Aikote' },
+        { code: 'GYAKU', nameJa: 'ãt', nameEn: 'Gyaku' },
+        { code: 'HIDARI', nameJa: 'ç∂', nameEn: 'Left' },
+        { code: 'TOBIKOMI', nameJa: 'îÚÇ—çûÇ›', nameEn: 'Tobikomi' },
+        { code: 'AIKOTE', nameJa: 'ëäè¨éË', nameEn: 'Aikote' },
       ]
       for(const ex of extraMethods){ if(!mItems.some((m:any)=> m.code===ex.code)) mItems = [...mItems, ex] }
       // Ensure requested additions are present (even if not in masters yet)
       const ensureMethod = (code:string, nameJa:string, nameEn:string)=>{
         if(!mItems.some((m:any)=> m.code===code)) mItems = [...mItems, { code, nameJa, nameEn, active: true }]
       }
-      ensureMethod('KATSUGI','„Åã„Å§„Åé','Katsugi')
-      ensureMethod('ATOUCHI','ÂæåÊâì„Å°','Ato-uchi')
+      ensureMethod('KATSUGI','Ç©Ç¬Ç¨','Katsugi')
+      ensureMethod('ATOUCHI','å„ë≈Çø','Ato-uchi')
       const pItems = json.data.listPositionMasters.items
       setMasters({ targets: tItems, methods: mItems, positions: pItems })
       const tMap: Record<string,string> = {}; for(const t of tItems) tMap[t.code]=t.nameJa
@@ -258,138 +258,3 @@ export default function App() {
       const token = await getToken(); if (!token) throw new Error('No ID token')
       const scorerPlayerId = form.scorer === 'our' ? selectedBout.ourPlayerId : selectedBout.opponentPlayerId
       const opponentPlayerId = form.scorer === 'our' ? selectedBout.opponentPlayerId : selectedBout.ourPlayerId
-      const base: any = { boutId: selectedBout.id, tSec, scorerPlayerId, opponentPlayerId, position: selectedBout.ourPosition ?? null, scorerStance: form.scorer === 'our' ? (selectedBout.ourStance ?? null) : (selectedBout.opponentStance ?? null), opponentStance: form.scorer === 'our' ? (selectedBout.opponentStance ?? null) : (selectedBout.ourStance ?? null), judgement: form.judgement, isDecisive: form.isDecisive, recordedAt: new Date().toISOString(), version: 1 }
-      const input = isFoul ? { ...base, techniqueKey: 'HANSOKU' } : { ...base, target: form.target, methods: form.methods, techniqueKey: techniqueKey(form.target, form.methods) }
-      const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPointMutation, variables: { input } }) })
-      const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
-      await fetchMatches(); setForm(f => ({ ...f, tSec: 60, methods: [], isDecisive: false, sequenceLen: 1, sequenceTargets: [], isMutual: false }))
-    } catch (e:any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
-  }
-
-  async function addFoul(toSide: 'left'|'right'){
-    if(!selectedBout) return
-    const penalizedPlayerId = toSide === 'left' ? selectedBout.ourPlayerId : selectedBout.opponentPlayerId
-    const opponentPlayerId = toSide === 'left' ? selectedBout.opponentPlayerId : selectedBout.ourPlayerId
-    const next = (fouls[penalizedPlayerId] ?? 0) + 1
-    setFouls(prev => ({ ...prev, [penalizedPlayerId]: next }))
-    if (next >= 2) {
-      setLoading(true); setError(null)
-      try {
-        const token = await getToken(); if (!token) throw new Error('No ID token')
-        const input: any = { boutId: selectedBout.id, tSec: Number(form.tSec) || 0, scorerPlayerId: opponentPlayerId, opponentPlayerId: penalizedPlayerId, position: selectedBout.ourPosition ?? null, scorerStance: null, opponentStance: null, judgement: 'HANSOKU', isDecisive: false, techniqueKey: 'HANSOKU', recordedAt: new Date().toISOString(), version: 1 }
-        const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPointMutation, variables: { input } }) })
-        const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
-        await fetchMatches(); setFouls(prev => ({ ...prev, [penalizedPlayerId]: 0 }))
-      } catch (e: any) { setError(String(e?.message ?? e)) } finally { setLoading(false) }
-    }
-  }
-
-  return (
-    <Authenticator>
-      {({ signOut, user }) => (
-        <div className="app-shell">
-          <header className="app-header">
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-              <Heading level={4} style={{ margin:0 }}>{t('app.title')}</Heading>
-            </div>
-            <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:12 }}>
-              <Badge variation="info">{user?.signInDetails?.loginId}</Badge>
-              <Button onClick={signOut}>{t('action.signOut')}</Button>
-            </div>
-          </header>
-          <aside className="app-sidebar">
-            <nav style={{ display:'grid', gap:6 }}>
-              <a className={`nav-item${tab==='dashboard'?' active':''}`} onClick={()=> setTab('dashboard')}>{t('tab.dashboard')}</a>
-              <a className={`nav-item${tab==='new'?' active':''}`} onClick={()=> setTab('new')}>{t('tab.new')}</a>
-              <hr />
-              <div className="muted" style={{ fontSize:'12px', padding:'4px 8px' }}>Admin</div>
-              <a className={`nav-item${tab==='players'?' active':''}`} onClick={()=> setTab('players')}>{t('nav.playersRegister')}</a>
-              <a className={`nav-item${tab==='universities'?' active':''}`} onClick={()=> setTab('universities')}>{t('nav.universities')}</a>
-            </nav>
-          </aside>
-          <main className="app-main">
-            {tab==='new' ? (
-              <NewEntryMode
-                matchId={selectedMatchId}
-                setMatchId={setSelectedMatchId}
-                matches={matches as any}
-                bouts={(selectedMatch as any)?.bouts?.items ?? []}
-                players={players}
-                masters={{ targets: masters.targets as any, methods: masters.methods as any }}
-                apiUrl={apiUrl}
-                getToken={getToken}
-                onSaved={fetchMatches}
-              />
-            ) : null}
-
-          {tab==='players' && (<PlayersAdmin apiUrl={apiUrl} getToken={getToken} />)}
-          {tab==='universities' && (<UniversitiesAdmin apiUrl={apiUrl} getToken={getToken} />)}
-          {tab==='dashboard' ? (
-            <>
-              <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-                <Button variation={dashMode==='personal'?'primary':'link'} onClick={()=> setDashMode('personal')}>{i18n.language?.startsWith('ja') ? 'ÂÄã‰∫∫' : 'Personal'}</Button>
-                <Button variation={dashMode==='team'?'primary':'link'} onClick={()=> setDashMode('team')}>{i18n.language?.startsWith('ja') ? '„ÉÅ„Éº„É†' : 'Team'}</Button>
-              </div>
-              {dashMode==='personal' ? (
-                <Dashboard
-                  matches={matches as any}
-                  players={players}
-                  labelJa={labelJa}
-                  masters={{ targets: masters.targets as any, methods: masters.methods as any }}
-                  homeUniversityId={homeUniversityId}
-                  ai={{ apiUrl, getToken }}
-                />
-              ) : (
-                <TeamDashboard
-                  matches={matches as any}
-                  universities={universities}
-                  apiUrl={apiUrl}
-                  getToken={getToken}
-                  tournamentPlaylists={tournamentPlaylists}
-                  players={players}
-                  labelJa={labelJa}
-                  homeUniversityId={homeUniversityId}
-                  ai={{ apiUrl, getToken }}
-                />
-              )}
-            </>
-          ) : null}
-          </main>
-        </div>
-      )}
-    </Authenticator>
-  )
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

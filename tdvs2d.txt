@@ -1,0 +1,13 @@
+                  <TableRow key={oppId}>
+                    <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
+                    <TableCell>{v.bouts}</TableCell>
+                    <TableCell>{v.wins}</TableCell>
+                    <TableCell>{v.losses}</TableCell>
+                    <TableCell>{v.draws}</TableCell>
+                    <TableCell>{v.pf}</TableCell>
+                    <TableCell>{v.pa}</TableCell>
+                    <TableCell>{(noteCountByOpponent[oppId]||0)>0 ? `?? ${(noteCountByOpponent[oppId]||0)}` : ''}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>

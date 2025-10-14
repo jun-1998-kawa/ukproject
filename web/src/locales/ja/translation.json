@@ -180,7 +180,9 @@
                    "JODAN":  "上段",
                    "CHUDAN":  "中段",
                    "NITOU_SHO":  "二刀（正）",
-                   "NITOU_GYAKU":  "二刀（逆）"
+                   "NITOU_GYAKU":  "二刀（逆）",
+                   "NITOU":  "二刀",
+                   "stance":  "構え"
                },
     "hints":  {
                   "noDataToSave":  "保存対象がありません（引き分け／変更なし）",
@@ -213,6 +215,13 @@
                          "set":  "結果を設定"
                      },
     "dashboard":  {
+                      "binSec":  "区切り(秒)",
+                      "timeInBout":  "経過秒分布",
+                      "granularity":  "粒度",
+                      "gran":  {
+                                   "technique":  "技×部位",
+                                   "target":  "部位のみ"
+                               },
                       "title":  "ダッシュボード",
                       "selectPlayer":  "選手",
                       "stats":  "統計",
@@ -246,10 +255,12 @@
                       "matchSummary":  "試合結果（団体）",
                       "teamWins":  "団体勝",
                       "oppWins":  "相手勝",
-                      "tournamentRanking":  "大会別ランキング",
+                      "tournamentRanking":  "大会ランキング",
                       "matches":  "試合数",
                       "playerContribution":  "選手貢献",
-                      "player":  "選手"
+                      "player":  "選手",
+                      "vsStance":  "対変刀",
+                      "vsHentou":  "対変刀"
                   },
     "filters":  {
                     "type":  "種別",
@@ -263,5 +274,22 @@
                    "players":  "選手貢献をCSV出力",
                    "tournaments":  "大会別成績をCSV出力",
                    "vsTeams":  "対戦団体成績をCSV出力"
+               },
+    "youtube":  {
+                   "edit":  "YouTube再生リスト設定",
+                   "title":  "大会ごとのYouTube再生リスト",
+                   "help":  "URLまたはプレイリストID（list=...）を入力してください。空にすると未設定になります。",
+                   "noTournaments":  "大会名がありません"
+               },
+    "analysis":  {
+                   "overallTitle":  "選手全体分析",
+                   "overallPh":  "全体所感・強み・課題・方針など",
+                   "playerNotes":  "選手分析",
+                   "comment":  "コメント",
+                   "noNotes":  "コメントはありません",
+                   "add":  "コメント追加",
+                   "edit":  "編集"
                }
 }
+
+

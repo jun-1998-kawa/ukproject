@@ -12,15 +12,15 @@ import UniversitiesAdmin from './components/UniversitiesAdmin'
 import Dashboard from './components/Dashboard'
 import TeamDashboard from './components/TeamDashboard'
 
-import outputs from './amplify_outputs.json'
+import outputs from '../../amplify_outputs.json'
 
 Amplify.configure(outputs)
 
 type Match = { id: string; heldOn: string; createdAt?: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
-type Bout = { id: string; createdAt?: string; seq?: number; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
 type Point = { id?: string; tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
 
-const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id createdAt seq ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement recordedAt } } } } } nextToken } }`
+const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn createdAt tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement recordedAt } } } } } nextToken } }`
 const listUniversitiesHome = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id isHome } nextToken } }`
 const listUniversitiesNames = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName isHome } nextToken } }`
 const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } listTournamentMasters { items { name shortName youtubePlaylist active } } }`
@@ -178,6 +178,9 @@ export default function App() {
       const res: Response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': token }, body: JSON.stringify({ query: listMastersQuery }) })
       const json: any = await res.json(); if (json.errors) throw new Error(JSON.stringify(json.errors))
       const tItems = json.data.listTargetMasters.items
+      const tpItems = (json.data.listTournamentMasters?.items ?? []) as any[];
+      const tpMap: Record<string,string> = {}; for(const tp of tpItems){ if(tp.youtubePlaylist && tp.name) tpMap[tp.name] = tp.youtubePlaylist }
+      (window as any).__tournamentPlaylists = tpMap
       let mItems = json.data.listMethodMasters.items
       // Append client-side extra method modifiers if missing
       const extraMethods = [
@@ -337,19 +340,10 @@ export default function App() {
                   labelJa={labelJa}
                   masters={{ targets: masters.targets as any, methods: masters.methods as any }}
                   homeUniversityId={homeUniversityId}
-                  ai={{ apiUrl, getToken }}
                 />
               ) : (
-                <TeamDashboard
-                  matches={matches as any}
-                  universities={universities}
-                  apiUrl={apiUrl}
-                  getToken={getToken}
-                  tournamentPlaylists={tournamentPlaylists}
-                  players={players}
-                  labelJa={labelJa}
+                <TeamDashboard\r\n                  matches={matches as any}\n                  universities={universities}\n                  apiUrl={apiUrl}\n                  getToken={getToken}\n                  tournamentPlaylists={tournamentPlaylists}\n                  players={players}\n                  labelJa={labelJa}
                   homeUniversityId={homeUniversityId}
-                  ai={{ apiUrl, getToken }}
                 />
               )}
             </>
@@ -360,9 +354,6 @@ export default function App() {
     </Authenticator>
   )
 }
-
-
-
 
 
 

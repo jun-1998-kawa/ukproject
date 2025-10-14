@@ -2,13 +2,13 @@
 import { useTranslation } from 'react-i18next'
 import { View, Heading, Button, TextField, Table, TableHead, TableRow, TableCell, TableBody, Alert, SelectField, Badge } from '@aws-amplify/ui-react'
 
-type Player = { id: string; name: string; nameKana?: string|null; universityId?: string|null; enrollYear?: number|null; grade?: number|null; gradeOverride?: number|null; programYears?: number|null; studentNo?: string|null; dan?: string|null; preferredStance?: string|null; isActive?: boolean|null; notes?: string|null }
+type Player = { id: string; name: string; nameKana?: string|null; universityId?: string|null; gender?: 'MEN'|'WOMEN'|null; enrollYear?: number|null; grade?: number|null; gradeOverride?: number|null; programYears?: number|null; studentNo?: string|null; dan?: string|null; preferredStance?: string|null; isActive?: boolean|null; notes?: string|null }
 type University = { id: string; name: string; shortName?: string|null }
 
-const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } nextToken } }`
+const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId gender enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } nextToken } }`
 const listUniversities = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
-const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
-const updatePlayerMutation = `mutation UpdatePlayer($input: UpdatePlayerInput!) { updatePlayer(input:$input){ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
+const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name nameKana universityId gender enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
+const updatePlayerMutation = `mutation UpdatePlayer($input: UpdatePlayerInput!) { updatePlayer(input:$input){ id name nameKana universityId gender enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
 const deletePlayerMutation = `mutation DeletePlayer($input: DeletePlayerInput!) { deletePlayer(input:$input){ id } }`
 
 export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promise<string|null> }){
@@ -19,6 +19,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
   const [players, setPlayers] = useState<Player[]>([])
   const [universities, setUniversities] = useState<University[]>([])
   const [filter, setFilter] = useState('')
+  const [genderFilter, setGenderFilter] = useState<'ALL'|'MEN'|'WOMEN'>('ALL')
   const [newName, setNewName] = useState('')
   const [newUniversityId, setNewUniversityId] = useState('')
   const [newEnrollYear, setNewEnrollYear] = useState<string>('')
@@ -28,6 +29,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
   const [newStudentNo, setNewStudentNo] = useState('')
   const [newNotes, setNewNotes] = useState('')
   const [newIsActive, setNewIsActive] = useState(true)
+  const [newGender, setNewGender] = useState<'MEN'|'WOMEN'|''>('')
 
   // Quick Add University modal state
   const [uniModal, setUniModal] = useState<{open:boolean, name:string, shortName:string, code:string, error:string|null}>({ open:false, name:'', shortName:'', code:'', error:null })
@@ -101,7 +103,12 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
 
   useEffect(()=>{ load() }, [])
 
-  const visible = useMemo(()=> players.filter(p => (p.name.toLowerCase().includes(filter.toLowerCase()) || (p.nameKana||'').toLowerCase().includes(filter.toLowerCase()))), [players, filter])
+  const visible = useMemo(()=> players.filter(p => {
+    const text = filter.trim().toLowerCase()
+    const textOk = !text || p.name.toLowerCase().includes(text) || (p.nameKana||'').toLowerCase().includes(text)
+    const genderOk = (genderFilter==='ALL') || ((p.gender||null)===genderFilter)
+    return textOk && genderOk
+  }), [players, filter, genderFilter])
 
   function currentAcademicYear(today = new Date()){
     const y = today.getFullYear();
@@ -124,6 +131,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
       const grade = calcGrade(enrollYear) ?? undefined
       const input:any = { name: newName.trim() }
       if(newUniversityId) input.universityId = newUniversityId
+      if(newGender) input.gender = newGender
       if(enrollYear) input.enrollYear = enrollYear
       if(grade) input.grade = grade
       if(newDan) input.dan = newDan
@@ -134,7 +142,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
       input.isActive = newIsActive
       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPlayerMutation, variables: { input } }) })
       const j: any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
-      setNewName(''); setNewUniversityId(''); setNewEnrollYear(''); setNewDan(''); setNewStance(''); setNewKana(''); setNewStudentNo(''); setNewNotes(''); setNewIsActive(true)
+      setNewName(''); setNewUniversityId(''); setNewEnrollYear(''); setNewDan(''); setNewStance(''); setNewKana(''); setNewStudentNo(''); setNewNotes(''); setNewIsActive(true); setNewGender('')
       await load()
     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
   }
@@ -143,7 +151,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
     setLoading(true); setError(null)
     try{
       const token = await getToken(); if(!token) return
-      const input:any = { id:p.id, name: p.name.trim(), nameKana: p.nameKana ?? null, universityId: p.universityId ?? null, enrollYear: p.enrollYear ?? null, grade: p.grade ?? null, gradeOverride: p.gradeOverride ?? null, programYears: p.programYears ?? null, studentNo: p.studentNo ?? null, dan: p.dan ?? null, preferredStance: p.preferredStance ?? null, isActive: p.isActive ?? null, notes: p.notes ?? null }
+      const input:any = { id:p.id, name: p.name.trim(), nameKana: p.nameKana ?? null, universityId: p.universityId ?? null, gender: p.gender ?? null, enrollYear: p.enrollYear ?? null, grade: p.grade ?? null, gradeOverride: p.gradeOverride ?? null, programYears: p.programYears ?? null, studentNo: p.studentNo ?? null, dan: p.dan ?? null, preferredStance: p.preferredStance ?? null, isActive: p.isActive ?? null, notes: p.notes ?? null }
       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: updatePlayerMutation, variables: { input } }) })
       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
       await load()
@@ -165,11 +173,22 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
     <>
     <View>
       <Heading level={5}>{t('admin.players.title')}</Heading>
-      <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap'}}>
+      <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap'}}>
         <TextField label={t('admin.players.search')} placeholder={t('placeholders.nameFilter')} value={filter} onChange={e=> setFilter(e.target.value)} width="16rem" />
+        <SelectField label={t('admin.players.gender')||'性別'} value={genderFilter} onChange={e=> setGenderFilter(e.target.value as any)} width="10rem">
+          <option value="ALL">{t('filters.all')||'すべて'}</option>
+          <option value="MEN">{t('gender.MEN')||'男子'}</option>
+          <option value="WOMEN">{t('gender.WOMEN')||'女子'}</option>
+        </SelectField>
         <TextField label={t('admin.players.newName')} value={newName} onChange={e=> setNewName(e.target.value)} width="16rem" />
+        <SelectField label={t('admin.players.gender')||'性別'} value={''} onChange={()=>{}} width="10rem" style={{ display:'none' }} />
         <TextField label={t('admin.players.kana')} value={newKana} onChange={e=> setNewKana(e.target.value)} width="12rem" />
         <TextField label={t('admin.players.studentNo')} value={newStudentNo} onChange={e=> setNewStudentNo(e.target.value)} width="12rem" />
+        <SelectField label={t('admin.players.gender')||'性別'} value={newGender} onChange={e=> setNewGender((e.target.value||'') as any)} width="10rem">
+          <option value="">{t('placeholders.unselected')}</option>
+          <option value="MEN">{t('gender.MEN')||'男子'}</option>
+          <option value="WOMEN">{t('gender.WOMEN')||'女子'}</option>
+        </SelectField>
         <SelectField label={t('admin.players.universityReq')} value={newUniversityId} onChange={e=> setNewUniversityId(e.target.value)} width="14rem">
           <option value="">{t('placeholders.unselected')}</option>
           {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
@@ -202,6 +221,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
             <TableCell as="th" width="360">{t('admin.players.th.name')}</TableCell>
             <TableCell as="th" width="240">{t('admin.players.th.kana')}</TableCell>
             <TableCell as="th" width="160">{t('admin.players.th.studentNo')}</TableCell>
+            <TableCell as="th" width="100">{t('admin.players.th.gender')||'性別'}</TableCell>
             <TableCell as="th" width="200">{t('admin.players.th.university')}</TableCell>
             <TableCell as="th" width="100">{t('admin.players.th.enrollYear')}</TableCell>
             <TableCell as="th" width="80">{t('admin.players.th.grade')}</TableCell>
@@ -216,31 +236,38 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
           {visible.map(p => (
             <TableRow key={p.id}>
               <TableCell>
-                <TextField size="small" labelHidden value={p.name} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, name:v}: x)) }} width="100%" />
+                <TextField size="small" label={t('admin.players.name')||'Name'} labelHidden value={p.name} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, name:v}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.nameKana ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, nameKana:v||null}: x)) }} width="100%" />
+                <TextField size="small" label={t('admin.players.kana')||'Kana'} labelHidden value={p.nameKana ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, nameKana:v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.studentNo ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, studentNo:v||null}: x)) }} width="100%" />
+                <TextField size="small" label={t('admin.players.studentNo')||'Student No.'} labelHidden value={p.studentNo ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, studentNo:v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={p.universityId ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, universityId: v||null}: x)) }} width="100%">
+                <SelectField size="small" label={t('admin.players.gender')||'性別'} labelHidden value={p.gender ?? ''} onChange={e=> { const v=e.target.value || null; setPlayers(list=> list.map(x=> x.id===p.id? {...x, gender: (v as any)}: x)) }} width="100%">
+                  <option value="">{t('placeholders.unselected')}</option>
+                  <option value="MEN">{t('gender.MEN')||'男子'}</option>
+                  <option value="WOMEN">{t('gender.WOMEN')||'女子'}</option>
+                </SelectField>
+              </TableCell>
+              <TableCell>
+                <SelectField size="small" label={t('admin.players.university')||'University'} labelHidden value={p.universityId ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, universityId: v||null}: x)) }} width="100%">
                   <option value="">{t('placeholders.unselected')}</option>
                   {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
                 </SelectField>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden type="number" value={String(p.enrollYear ?? '')} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, enrollYear: v? Number(v): null}: x)) }} width="100%" />
+                <TextField size="small" label={t('admin.players.enrollYear')||'Enroll Year'} labelHidden type="number" value={String(p.enrollYear ?? '')} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, enrollYear: v? Number(v): null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
                 <Badge variation="info">{calcGrade(p.enrollYear) ?? '-'}</Badge>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.dan ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, dan: v||null}: x)) }} width="100%" />
+                <TextField size="small" label={t('admin.players.dan')||'Dan'} labelHidden value={p.dan ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, dan: v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={p.preferredStance ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, preferredStance: v||null}: x)) }} width="100%">
+                <SelectField size="small" label={t('admin.players.stance')||'Stance'} labelHidden value={p.preferredStance ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, preferredStance: v||null}: x)) }} width="100%">
                   <option value="">{t('placeholders.unselected')}</option>
                   <option value="JODAN">{t('stance.JODAN')}</option>
                   <option value="CHUDAN">{t('stance.CHUDAN')}</option>
@@ -249,13 +276,13 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
                 </SelectField>
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={String(p.isActive ?? true)} onChange={e=> { const v=e.target.value==='true'; setPlayers(list=> list.map(x=> x.id===p.id? {...x, isActive: v}: x)) }} width="100%">
+                <SelectField size="small" label={t('admin.players.active')||'Active'} labelHidden value={String(p.isActive ?? true)} onChange={e=> { const v=e.target.value==='true'; setPlayers(list=> list.map(x=> x.id===p.id? {...x, isActive: v}: x)) }} width="100%">
                   <option value="true">{t('admin.players.activeTrue')}</option>
                   <option value="false">OB/OG</option>
                 </SelectField>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.notes ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, notes: v||null}: x)) }} width="100%" />
+                <TextField size="small" label={t('admin.players.notes')||'Notes'} labelHidden value={p.notes ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, notes: v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
                 <Button size="small" onClick={()=> save(players.find(x=> x.id===p.id)!)} isLoading={loading}>{t('actions.save')}</Button>
@@ -282,7 +309,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
           </div>
           {uniModal.error && (<div style={{ color:'#b00', fontSize:12, marginTop:8 }}>{uniModal.error}</div>)}
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
-            <Button variation="link" onClick={()=> setUniModal(m=> ({...m, open:false }))}>{t('action.reload').replace('Reload','Cancel')}</Button>
+            <Button variation="link" onClick={()=> setUniModal(m=> ({...m, open:false }))}>{t('action.cancel') || 'Cancel'}</Button>
             <Button variation="primary" onClick={quickAddUniversity}>{t('actions.add')}</Button>
           </div>
         </div>

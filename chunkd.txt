@@ -1,0 +1,19 @@
+      try{ localStorage.setItem('yt.playlists', JSON.stringify(map)) }catch{}
+      // send to API (inline input; no variables)
+      if(apiUrl && getToken){
+        try{
+          const token = await getToken();
+          if(token){
+            const updateMut = "mutation UpdateTournamentMaster { updateTournamentMaster(input:{ name: \"" + key.Replace("\"","\\\"") + "\", youtubePlaylist: " + (url?("\"" + url.Replace("\"","\\\"") + "\""):"null") + " }){ name } }"
+            const createMut = "mutation CreateTournamentMaster { createTournamentMaster(input:{ name: \"" + key.Replace("\"","\\\"") + "\", youtubePlaylist: " + (url?("\"" + url.Replace("\"","\\\"") + "\""):"null") + " }){ name } }"
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateMut }) }) }catch{}
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createMut }) }) }catch{}
+          }
+        }catch{}
+      }
+    }finally{
+      setYtOpen(false)
+    }
+  }
+
+  async function loadRefData(){

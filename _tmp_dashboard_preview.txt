@@ -1,7 +1,9 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
-import AIPanel from './AIPanel'
+
+// Shared color palette for charts/legend
+const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
 
 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
@@ -15,11 +17,9 @@ export default function Dashboard(props:{
   masters: { targets: Master[]; methods: Master[] }
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
-  ai?: { apiUrl: string; getToken: ()=>Promise<string> }
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
-  const ai = props.ai
   const [playerId, setPlayerId] = useState<string>('')
   const [from, setFrom] = useState<string>('')
   const [to, setTo] = useState<string>('')
@@ -28,24 +28,8 @@ export default function Dashboard(props:{
   const TOP_N = 5
   const BIN_SIZE_SEC = 15
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
-  const [aiOpen, setAiOpen] = useState(false)
-  const [aiPayload, setAiPayload] = useState<any|null>(null)
 
-  function gradeLabel(g?: number|null){ return (typeof g==='number' && g>0 && g<10) ? `${g}年` : '' }
-  const typeaheadItems: TypeaheadItem[] = useMemo(()=>{
-    if(playersLite && universities){
-      return playersLite.map(p=>{
-        const uni = universities.find(u=> u.id===p.universityId)
-        const uniLabel = uni?.shortName || uni?.name || ''
-        const gl = gradeLabel(p.grade)
-        const label = [p.name, uniLabel, gl].filter(Boolean).join(' ')
-        const searchKey = [p.name, p.nameKana||'', uniLabel, gl].join(' ')
-        return { id: p.id, label, searchKey }
-      }).sort((a,b)=> a.label.localeCompare(b.label,'ja'))
-    }
-    // Fallback to simple map
-    return Object.entries(players).map(([id,name])=> ({ id, label: name })).sort((a,b)=> a.label.localeCompare(b.label,'ja'))
-  }, [playersLite, universities, players])
+  const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
 
   // Persist filter in localStorage (share same key with App to keep consistent)
   useEffect(()=>{
@@ -55,74 +39,6 @@ export default function Dashboard(props:{
     }catch{}
   },[])
   useEffect(()=>{ try{ localStorage.setItem('filters:type', officialFilter) }catch{} }, [officialFilter])
-  // Fetch qualitative notes for selected player
-  useEffect(()=>{
-    (async()=>{
-      setNotes([])
-      if(!props.apiUrl || !props.getToken || !playerId) return
-      try{
-        const token = await props.getToken(); if(!token) return
-        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
-        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
-        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
-        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
-      }catch{}
-    })()
-  }, [playerId, props.apiUrl, props.getToken])
-
-  const updateNoteMut = `mutation UpdatePlayerNote($input: UpdatePlayerNoteInput!){ updatePlayerNote(input:$input){ playerId matchId } }`
-  const createNoteMut = `mutation CreatePlayerNote($input: CreatePlayerNoteInput!){ createPlayerNote(input:$input){ playerId matchId } }`
-  const getPlayerQuery = `query GetPlayer($id:ID!){ getPlayer(id:$id){ id notes } }`
-  const updatePlayerMut = `mutation UpdatePlayer($input: UpdatePlayerInput!){ updatePlayer(input:$input){ id } }`
-
-  function playerMatches(){
-    if(!playerId) return [] as Match[]
-    const arr: Match[] = []
-    for(const m of matches){
-      const has = (m.bouts?.items ?? []).some(b=> b.ourPlayerId===playerId || b.opponentPlayerId===playerId)
-      if(has) arr.push(m)
-    }
-    return arr
-  }
-
-  // Load/save overall player analysis (Player.notes)
-  useEffect(()=>{
-    (async()=>{
-      setOverallNote('')
-      if(!props.apiUrl || !props.getToken || !playerId) return
-      try{
-        const token = await props.getToken(); if(!token) return
-        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: getPlayerQuery, variables: { id: playerId } }) })
-        const j:any = await res.json(); const p = j?.data?.getPlayer
-        setOverallNote(p?.notes || '')
-      }catch{}
-    })()
-  }, [playerId, props.apiUrl, props.getToken])
-
-  async function saveOverall(){
-    if(!props.apiUrl || !props.getToken || !playerId) return
-    setOverallSaving(true)
-    try{
-      const token = await props.getToken(); if(!token) return
-      const input:any = { id: playerId, notes: (overallNote||'').trim() }
-      await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updatePlayerMut, variables: { input } }) })
-    }catch{}
-    finally{ setOverallSaving(false) }
-  }
-  // Fetch qualitative notes for selected player
-  useEffect(()=>{
-    (async()=>{
-      setNotes([])
-      if(!props.apiUrl || !props.getToken || !playerId) return
-      try{
-        const token = await props.getToken(); if(!token) return
-        const q = `query ListPlayerNotesByPlayer($playerId: ID!, $limit:Int){ listPlayerNotesByPlayer(playerId:$playerId, limit:$limit){ items{ matchId comment } } }`
-        const res: Response = await fetch(props.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: q, variables: { playerId, limit: 200 } }) })
-        const j:any = await res.json(); const arr = (j?.data?.listPlayerNotesByPlayer?.items ?? []) as any[]
-        setNotes(arr.map((x:any)=> ({ matchId:x.matchId, comment:x.comment||'' })))
-      }catch{}
-    })()
-  }, [playerId, props.apiUrl, props.getToken])
 
   const stat = useMemo(()=>{
     if(!playerId) return null
@@ -171,6 +87,7 @@ export default function Dashboard(props:{
             pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
             const key = buildTechniqueKey(p.target||'', p.methods||[])
+              combinedAgainst[key] = (combinedAgainst[key]||0)+1
             combinedFor[key] = (combinedFor[key]||0)+1
             if(p.target) targetOnlyFor[p.target] = (targetOnlyFor[p.target]||0)+1
             if(p.recordedAt){ const h = new Date(p.recordedAt).getHours(); if(!Number.isNaN(h)) hoursFor[h]++ }
@@ -248,10 +165,10 @@ export default function Dashboard(props:{
       <Heading level={4}>{t('dashboard.title')}</Heading>
       <View marginTop="0.5rem">
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
-          <div>
-            <label style={{ fontSize:12, color:'#444' }}>{t('dashboard.selectPlayer')}</label>
-            <Typeahead value={playerId} onChange={setPlayerId} items={typeaheadItems} width={'18rem'} placeholder={t('placeholders.nameFilter')||'選手名を入力'} />
-          </div>
+          <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="18rem">
+            <option value="">--</option>
+            {playerList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
+          </SelectField>
           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
           <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">
@@ -261,7 +178,6 @@ export default function Dashboard(props:{
             <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
           </SelectField>
           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
-          {(()=>{ const tname=tournamentFilter.trim(); const url=tname? props.tournamentPlaylists?.[tname]: undefined; return url? (<a href={url} target="_blank" rel="noopener noreferrer" title="YouTube" style={{ marginLeft:-6, transform:'translateY(6px)' }}>▶</a>) : null })()}
           <SelectField label={t('dashboard.granularity')||'Granularity'} value={granularity} onChange={e=> setGranularity(e.target.value as any)} size="small" width="12rem">
             <option value="technique">{t('dashboard.gran.technique')||'Technique x Target'}</option>
             <option value="target">{t('dashboard.gran.target')||'Target only'}</option>
@@ -286,7 +202,6 @@ export default function Dashboard(props:{
             <div>{t('dashboard.avgTimeToScore')}: <b>{stat.avgTime==null?'-':stat.avgTime.toFixed(1)+'s'}</b></div>
             <div>{t('dashboard.fastest')}: <b>{stat.fastest==null?'-':stat.fastest+'s'}</b> / {t('dashboard.slowest')}: <b>{stat.slowest==null?'-':stat.slowest+'s'}</b></div>
             <div>{t('dashboard.pointsPerBout')}: <b>{stat.ppg.toFixed(2)}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
-            <div>{t('dashboard.vsHentou')||'対変刀'}: <b>{(((stat as any).vsHentou?.winRate||0)*100).toFixed(1)}%</b> <span className="muted">({(stat as any).vsHentou?.wins||0}-{(stat as any).vsHentou?.losses||0}-{(stat as any).vsHentou?.draws||0} / {(stat as any).vsHentou?.bouts||0})</span></div>
           </View>
 
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
@@ -307,13 +222,15 @@ export default function Dashboard(props:{
 
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
           </View>
+            <Heading level={6}>{t('dashboard.timeInBout')||'経過秒分布'}</Heading>
+            <Heading level={6}>{t('dashboard.timeInBout')||'経過秒分布'}</Heading>
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
-            <Heading level={6}>{t('dashboard.vsStance') || '対変刀勝率'}</Heading>
+            <Heading level={6}>{t('dashboard.vsStance') || '対スタイル勝率'}</Heading>
             <View className="table-wrap">
               <Table variation="bordered" highlightOnHover>
                 <TableHead>
                   <TableRow>
-                    <TableCell as="th">{t('stance.stance')||'構え'}</TableCell>
+                    <TableCell as="th">{t('stance.stance')||'スタイル'}</TableCell>
                     <TableCell as="th">{t('dashboard.bouts')}</TableCell>
                     <TableCell as="th">{t('dashboard.wins')}</TableCell>
                     <TableCell as="th">{t('dashboard.losses')}</TableCell>
@@ -347,10 +264,6 @@ export default function Dashboard(props:{
             </View>
           </View>
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
-            <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden', marginBottom:12}}>
-              <Heading level={6}>{t('dashboard.timeInBout') || '経過秒分布'}</Heading>
-              <TimeInBoutHistogram binsFor={(stat as any).tForBins} binsAgainst={(stat as any).tAgainstBins} binSizeSec={BIN_SIZE_SEC} />
-            </View>
             <Heading level={6}>{t('dashboard.vsOpponents')}</Heading>
             <View className="table-wrap">
             <Table variation="bordered" highlightOnHover>
@@ -363,67 +276,26 @@ export default function Dashboard(props:{
                   <TableCell as="th">{t('dashboard.draws')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
                   <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
-                  <TableCell as="th">💬</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stat.vsTop.map(([oppId, v])=> {
-                  // count notes for this opponent across matches for selected player
-                  let c = 0
-                  for(const n of notes){
-                    const m = matches.find(mm=> mm.id===n.matchId)
-                    if(!m) continue
-                    for(const b of (m.bouts?.items ?? [])){
-                      const isLeft = b.ourPlayerId===playerId
-                      const isRight = b.opponentPlayerId===playerId
-                      if(!isLeft && !isRight) continue
-                      const thisOpp = isLeft ? b.opponentPlayerId : b.ourPlayerId
-                      if(thisOpp===oppId){ c++; break }
-                    }
-                  }
-                  return (
-                    <TableRow key={oppId}>
-                      <TableCell>{players[oppId] ?? oppId}</TableCell>
-                      <TableCell>{v.bouts}</TableCell>
-                      <TableCell>{v.wins}</TableCell>
-                      <TableCell>{v.losses}</TableCell>
-                      <TableCell>{v.draws}</TableCell>
-                      <TableCell>{v.pf}</TableCell>
-                      <TableCell>{v.pa}</TableCell>
-                      <TableCell>{c>0 ? `💬 ${c}` : ''}</TableCell>
-                    </TableRow>
-                  )
-                })}
+                {stat.vsTop.map(([oppId, v])=> (
+                  <TableRow key={oppId}>
+                    <TableCell>{players[oppId] ?? oppId}</TableCell>
+                    <TableCell>{v.bouts}</TableCell>
+                    <TableCell>{v.wins}</TableCell>
+                    <TableCell>{v.losses}</TableCell>
+                    <TableCell>{v.draws}</TableCell>
+                    <TableCell>{v.pf}</TableCell>
+                    <TableCell>{v.pa}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
-          </Table>
+            </Table>
+            </View>
+          </View>
         </View>
-        {ai && (
-          <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end' }}>
-            <Button variation="primary" onClick={()=> {
-              if(!stat || !playerId) return
-              const payload = {
-                version: 'v1', mode: 'personal', locale: (navigator?.language||'ja'),
-                filters: { from, to, type: officialFilter, tournamentQuery: tournamentFilter||'' },
-                subject: { playerId, displayName: players[playerId]||playerId },
-                sampleSizes: { matches: (matches||[]).length, bouts: stat.bouts },
-                stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, ppg: stat.ppg, diff: stat.diff, winRate: stat.winRate, avgTimeToScoreSec: stat.avgTime, fastestSec: stat.fastest, slowestSec: stat.slowest },
-                topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
-                topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
-                vsOpponents: (stat.vsTop||[]).map(([oppId, v]: any)=> ({ opponentId: oppId, name: players[oppId]||oppId, ...v })),
-                notes: { dataSource: 'client-aggregated' }
-              }
-              setAiPayload(payload); setAiOpen(true)
-            }}>
-              AI要約
-            </Button>
-          </div>
-        )}
-      </View>
       )}
-      {ai && (
-        <AIPanel open={aiOpen} onClose={()=> setAiOpen(false)} apiUrl={ai.apiUrl} getToken={ai.getToken} payload={aiPayload} />
-      )}
-      {/* read-only notes: edit modal removed */}
     </View>
   )
 }
@@ -497,7 +369,6 @@ function TimeInBoutHistogram(props:{ binsFor:number[]; binsAgainst:number[]; bin
     </div>
   )
 }
-
 
 
 

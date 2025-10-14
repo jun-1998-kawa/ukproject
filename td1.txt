@@ -1,0 +1,61 @@
+
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
+            <div className="graph"><Pie items={(stat.topCombinedAgainst as any).map(([k,v]:[string,number])=> [labelTechniqueCombined(k), v])} /></div>
+          </View>
+
+          {/* 対変刀は統計カードに集約するため、このセクションは削除 */}
+
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.vsOpponents') || 'Vs Teams'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{t('dashboard.opponent') || 'Opponent'}</TableCell>
+                  <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+                  <TableCell as="th">{t('dashboard.wins')}</TableCell>
+                  <TableCell as="th">{t('dashboard.losses')}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(stat.vsTop as any).map(([oppId, v]:[string, any])=> (
+                  <TableRow key={oppId}>
+                    <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
+                    <TableCell>{v.bouts}</TableCell>
+                    <TableCell>{v.wins}</TableCell>
+                    <TableCell>{v.losses}</TableCell>
+                    <TableCell>{v.draws}</TableCell>
+                    <TableCell>{v.pf}</TableCell>
+                    <TableCell>{v.pa}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            </View>
+          </View>
+
+          {/* Match-level W/L/D and tournament ranking */}
+          <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, overflow:'hidden'}}>
+            <Heading level={6}>{t('dashboard.matchSummary') || '試合結果'}</Heading>
+            <View className="table-wrap">
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{t('dashboard.tournament')||'大会'}</TableCell>
+                  <TableCell as="th">{t('dashboard.teamWins')||'チーム勝ち'}</TableCell>
+                  <TableCell as="th">{t('dashboard.oppWins')||'相手勝ち'}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')||'引分'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '結果' : 'Result'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {(matchStats?.rows||[]).map(r=> (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      {r.tournament}
+                      {r.tournament && ytMap[r.tournament] && (
+                        <a href={ytMap[r.tournament]} target="_blank" rel="noopener noreferrer" style={{ marginLeft:8, fontSize:12 }}>?</a>

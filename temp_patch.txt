@@ -1,0 +1,111 @@
+*** Begin Patch
+*** Update File: web/src/components/NewEntryMode.tsx
+@@
+-import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge } from '@aws-amplify/ui-react'
++import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge, Heading } from '@aws-amplify/ui-react'
+@@
+ export default function NewEntryMode(props: {
+   matchId: string
+   setMatchId: (id: string)=> void
+   matches: { id: string; heldOn: string; tournament?: string; isOfficial?: boolean; bouts?: { items: Bout[] } }[]
+   bouts: Bout[]
+   players: Record<string,string>
+   masters: { targets: Master[]; methods: Master[] }
+   apiUrl: string
+   getToken: () => Promise<string | null>
+   onSaved: ()=> Promise<void> | void
+ }){
+   const { t } = useTranslation()
+   const { matchId, setMatchId, matches, bouts, players, masters, apiUrl, getToken, onSaved } = props
+@@
+   const [allowHantei, setAllowHantei] = useState<boolean>(false)
+   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
+   const [savingId, setSavingId] = useState<string>('')
++  // YouTube playlist settings for current tournament
++  const [ytOpen, setYtOpen] = useState(false)
++  const [ytUrl, setYtUrl] = useState<string>('')
+@@
+   useEffect(()=>{
+     const init: Record<string, RowState> = {}
+     for(const b of bouts){ init[b.id] = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 } }
+     setRows(init)
+     const m = matches.find(m=> m.id===matchId)
+     if(m){ setTournament(m.tournament ?? ''); setHeldOn(m.heldOn ?? ''); setIsOfficial((m as any).isOfficial ?? true); setOurUniversityId((m as any).ourUniversityId ?? ''); setOpponentUniversityId((m as any).opponentUniversityId ?? '') }
+     // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [bouts.map(b=> b.id).join(','), matchId])
++
++  // Load initial YouTube URL for selected tournament from localStorage (best-effort)
++  useEffect(()=>{
++    try{
++      const raw = localStorage.getItem('yt.playlists');
++      if(raw){
++        const map = JSON.parse(raw) as Record<string,string>;
++        setYtUrl(map[tournament] || '')
++      } else { setYtUrl('') }
++    }catch{ setYtUrl('') }
++  }, [tournament])
++
++  function canonicalPlaylistUrl(input: string): string | '' {
++    const s = (input||'').trim()
++    if(!s) return ''
++    try{
++      if(/^https?:\/\//i.test(s)){
++        const u = new URL(s)
++        const id = u.searchParams.get('list') || ''
++        return id ? `https://www.youtube.com/playlist?list=${id}` : s
++      }
++      // treat as playlist id
++      return `https://www.youtube.com/playlist?list=${s}`
++    }catch{ return '' }
++  }
++
++  async function saveYtForTournament(){
++    try{ // persist locally
++      const key = tournament?.trim(); if(!key){ setYtOpen(false); return }
++      const url = canonicalPlaylistUrl(ytUrl)
++      let map: Record<string,string> = {}
++      try{ const raw = localStorage.getItem('yt.playlists'); if(raw) map = JSON.parse(raw) }catch{}
++      if(url) map[key] = url; else delete map[key]
++      try{ localStorage.setItem('yt.playlists', JSON.stringify(map)) }catch{}
++      // send to API
++      if(apiUrl && getToken){
++        try{
++          const token = await getToken();
++          if(token){
++            const updateMut = `mutation UpdateTournamentMaster($input: UpdateTournamentMasterInput!){ updateTournamentMaster(input:$input){ name } }`
++            const createMut = `mutation CreateTournamentMaster($input: CreateTournamentMasterInput!){ createTournamentMaster(input:$input){ name } }`
++            const input: any = { name: key, youtubePlaylist: url || null }
++            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateMut, variables: { input } }) }) }catch{}
++            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createMut, variables: { input } }) }) }catch{}
++          }
++        }catch{}
++      }
++    }finally{
++      setYtOpen(false)
++    }
++  }
+@@
+-        <TextField label={t('labels.tournament')} value={tournament} onChange={e=> setTournament(e.target.value)} width={dense?"12rem":"16rem"} />
++        <TextField label={t('labels.tournament')} value={tournament} onChange={e=> setTournament(e.target.value)} width={dense?"12rem":"16rem"} />
++        <Button size="small" onClick={()=> setYtOpen(true)} isDisabled={!tournament?.trim()}>{t('youtube.edit')||'YouTube再生リスト設定'}</Button>
+@@
+     </View>
++    {ytOpen && (
++      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setYtOpen(false)}>
++        <div style={{ background:'#fff', minWidth:360, maxWidth:720, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
++          <Heading level={5}>{t('youtube.title')||'大会ごとのYouTube再生リスト'}</Heading>
++          <div style={{ fontSize:12, color:'#555', marginTop:4 }}>{t('youtube.help')||'URLまたはプレイリストID（list=...）を入力してください。空にすると未設定になります。'}</div>
++          <div style={{ display:'grid', gap:8, marginTop:12 }}>
++            <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:8, alignItems:'center' }}>
++              <div style={{ fontSize:13 }}>{tournament || '-'}</div>
++              <input value={ytUrl} onChange={e=> setYtUrl(e.target.value)} placeholder="https://www.youtube.com/playlist?list=..." style={{ width:'100%', padding:'6px 8px', fontSize:13 }} />
++            </div>
++          </div>
++          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
++            <Button variation="link" onClick={()=> setYtOpen(false)}>{t('action.cancel')||'キャンセル'}</Button>
++            <Button variation="primary" onClick={saveYtForTournament}>{t('actions.save')||'保存'}</Button>
++          </div>
++        </div>
++      </div>
++    )}
+*** End Patch

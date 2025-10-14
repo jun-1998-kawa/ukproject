@@ -1,4 +1,4 @@
-{
+﻿{
   "labels": {"match": "Match/Date","tournament": "Tournament","date": "Date","ourUniversity": "Our Univ.","opponentUniversity": "Opponent Univ.","searchPlayer": "Search Player","universityUnknown": "Unknown affiliation","official":"Official","practice":"Practice","intra":"Intra-squad"},
   "columns": {"leftPlayer": "Left Player","rightPlayer": "Right Player","first": "1st","second": "2nd","actions": "Actions"},
   "actions": {"saveAll": "Save All","switchStandard": "Switch to standard","switchDense": "Switch to dense","reloadRefs": "Reload refs","add": "Add","save": "Save","foulPlus": "Foul +","foulMinus": "Foul -","foul": "Foul","delete": "Delete","deleteMatch":"Delete match","purgeAllMatches":"Delete All Matches"},
@@ -35,6 +35,21 @@
   "winType": {"IPPON": "Ippon","NIHON": "Nihon","HANSOKU": "Hansoku","ENCHO": "Encho","HANTEI": "Hantei","DRAW": "Draw"},
   "resultEditor": {"set":"Set Result"},
   "export": {"players": "Export Players (CSV)", "vsTeams": "Export Vs Teams (CSV)", "tournaments": "Export Tournaments (CSV)", "print": "Print"},
-  "dashboard": {"title":"Dashboard","selectPlayer":"Player","stats":"Stats","bouts":"Bouts","wins":"Wins","losses":"Losses","draws":"Draws","winRate":"Win rate","pointsFor":"Points for","pointsAgainst":"Points against","avgTimeToScore":"Avg time to score","topCombinedFor":"Top scoring techniques","topCombinedAgainst":"Top conceded techniques","pieFor":"Scoring technique distribution","pieAgainst":"Conceded technique distribution","vsOpponents":"Vs opponents","opponent":"Opponent","noData":"Select a player to view stats","from":"From","to":"To","tournament":"Tournament","tournamentPh":"Filter by name","topN":"Top N","clear":"Clear","fastest":"Fastest","slowest":"Slowest","pointsPerBout":"Points per bout","diff":"Point diff","teamTitle":"Team Dashboard","selectTeam":"Team","matchSummary":"Match Results","teamWins":"Team Wins","oppWins":"Opponent Wins","tournamentRanking":"Tournament Ranking","matches":"Matches","playerContribution":"Player Contribution","player":"Player"}
-  ,"dashboard.personal":"Personal","dashboard.team":"Team","dashboard.result":"Result"
+  "dashboard": {"binSec":"Bin (sec)","timeInBout":"Time-in-bout distribution","granularity":"Granularity","gran":{"technique":"Technique×Target","target":"Target only"},"title":"Dashboard","selectPlayer":"Player","stats":"Stats","bouts":"Bouts","wins":"Wins","losses":"Losses","draws":"Draws","winRate":"Win rate","pointsFor":"Points for","pointsAgainst":"Points against","avgTimeToScore":"Avg time to score","topCombinedFor":"Top scoring techniques","topCombinedAgainst":"Top conceded techniques","pieFor":"Scoring technique distribution","pieAgainst":"Conceded technique distribution","vsOpponents":"Vs opponents","opponent":"Opponent","noData":"Select a player to view stats","from":"From","to":"To","tournament":"Tournament","tournamentPh":"Filter by name","topN":"Top N","clear":"Clear","fastest":"Fastest","slowest":"Slowest","pointsPerBout":"Points per bout","diff":"Point diff","teamTitle":"Team Dashboard","selectTeam":"Team","matchSummary":"Match Results","teamWins":"Team Wins","oppWins":"Opponent Wins","tournamentRanking":"Tournament Ranking","matches":"Matches","playerContribution":"Player Contribution","player":"Player"}
+  ,"dashboard.personal":"Personal","dashboard.team":"Team","dashboard.result":"Result",
+  "youtube": {
+    "edit": "YouTube Playlist Settings",
+    "title": "YouTube Playlists by Tournament",
+    "help": "Enter a URL or playlist ID (list=...). Empty clears the setting.",
+    "noTournaments": "No tournament names"
+  },
+  "analysis": {
+    "overallTitle": "Overall Analysis",
+    "overallPh": "Overall observations, strengths, areas to improve, plan",
+    "playerNotes": "Player Analysis",
+    "comment": "Comment",
+    "noNotes": "No comments",
+    "add": "Add Comment",
+    "edit": "Edit"
+  }
 }

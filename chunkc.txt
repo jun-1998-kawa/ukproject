@@ -1,0 +1,59 @@
+        const map = JSON.parse(raw) as Record<string,string>;
+        setYtUrl(map[tournament] || '')
+      } else { setYtUrl('') }
+    }catch{ setYtUrl('') }
+  }, [tournament])
+
+  function canonicalPlaylistUrl(input: string): string | '' {
+    const s = (input||'').trim()
+    if(!s) return ''
+    try{
+      if(/^https?:\/\//i.test(s)){
+        const u = new URL(s)
+        const id = u.searchParams.get('list') || ''
+        return id ? "https://www.youtube.com/playlist?list=" + id : s
+      }
+      // treat as playlist id
+      return "https://www.youtube.com/playlist?list" + s
+    }catch{ return '' }
+  }
+
+  async function saveYtForTournament(){
+    try{ // persist locally
+      const key = tournament?.trim(); if(!key){ setYtOpen(false); return }
+      const url = canonicalPlaylistUrl(ytUrl)
+      let map: Record<string,string> = {}
+      try{ const raw = localStorage.getItem('yt.playlists'); if(raw) map = JSON.parse(raw) }catch{}
+      if(url) map[key] = url; else delete map[key]
+      try{ localStorage.setItem('yt.playlists', JSON.stringify(map)) }catch{}
+      // send to API (inline input; no variables)
+      if(apiUrl && getToken){
+        try{
+          const token = await getToken();
+          if(token){
+            const updateMut = "mutation UpdateTournamentMaster { updateTournamentMaster(input:{ name: \"" + key.Replace("\"","\\\"") + "\", youtubePlaylist: " + (url?("\"" + url.Replace("\"","\\\"") + "\""):"null") + " }){ name } }"
+            const createMut = "mutation CreateTournamentMaster { createTournamentMaster(input:{ name: \"" + key.Replace("\"","\\\"") + "\", youtubePlaylist: " + (url?("\"" + url.Replace("\"","\\\"") + "\""):"null") + " }){ name } }"
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: updateMut }) }) }catch{}
+            try{ await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query: createMut }) }) }catch{}
+          }
+        }catch{}
+      }
+    }finally{
+      setYtOpen(false)
+    }
+  }
+
+  async function loadRefData(){
+    setRefError(undefined)
+    try{
+      const token = await getToken(); if(!token) return
+      // universities
+      const qU = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+      let ntU: string | null = null; const accU: University[] = []
+      do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
+      setUniversities(accU)
+      // players with universityId
+      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId } nextToken } }`
+      let ntP: string | null = null; const accP: PlayerEx[] = []
+      do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
+      setPlayersEx(accP)

@@ -1,0 +1,15 @@
+                  },
+    "filters":  {
+                    "type":  "種別",
+                    "all":  "すべて",
+                    "official":  "公式戦のみ",
+                    "practice":  "練習試合のみ",
+                    "intra":  "部内戦のみ"
+                },
+    "export":  {
+                   "print":  "印刷",
+                   "players":  "選手貢献をCSV出力",
+                   "tournaments":  "大会別成績をCSV出力",
+                   "vsTeams":  "対戦団体成績をCSV出力"
+               }
+}

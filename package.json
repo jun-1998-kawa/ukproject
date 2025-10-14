@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "scripts": {
     "typecheck": "tsc --noEmit -p amplify/tsconfig.json",
+    "typecheck:web": "npm --prefix web run typecheck",
+    "build:web": "npm --prefix web run build",
+    "check": "npm run typecheck && npm --prefix web run build",
+    "seed:tournaments": "node scripts/seedTournaments.mjs",
     "tokens:css": "node scripts/figma-to-css.mjs",
     "seed:masters": "node scripts/seedMasters.mjs",
     "seed:initial": "node scripts/seedInitial.mjs",
