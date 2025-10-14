@@ -78,7 +78,7 @@ function IpponCell(props: {
       </div>
       {open && (
         <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:4, background:'#fff', display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:4, maxHeight:140, width:260, overflowY:'auto', border:'1px solid #ddd', borderRadius:6, padding:6, boxShadow:'0 2px 8px rgba(0,0,0,0.15)' }}>
-          {safeMethods.map(m=> {
+          {methods.map(m=> {
             const checked = v.methods.includes(m.code)
             const allowed = methodAllowedForTarget2(m.code, v.target)
             return (
@@ -96,7 +96,7 @@ function IpponCell(props: {
       )}
       <SelectField labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
         <option value=""></option>
-        {safeTargets.map(tgt=> (
+        {targets.map(tgt=> (
           <option key={tgt.code} value={tgt.code}>{i18n.language.startsWith('ja') ? (tgt.nameJa ?? tgt.nameEn ?? tgt.code) : (tgt.nameEn ?? tgt.code)}</option>
         ))}
       </SelectField>
@@ -160,6 +160,9 @@ export default function NewEntryMode(props: {
   const safeTargets2 = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets2
   const safeMethods2 = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods2
   const [focusBoutId, setFocusBoutId] = useState<string>('')
+  // Back-compat aliases for components using safeTargets/safeMethods
+  const safeTargets = safeTargets2
+  const safeMethods = safeMethods2
   const [allowEncho, setAllowEncho] = useState<boolean>(true)
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
@@ -544,6 +547,7 @@ export default function NewEntryMode(props: {
     </>
   )
 }
+
 
 
 
