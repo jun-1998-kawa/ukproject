@@ -8,6 +8,7 @@ export const aiCoach = defineFunction({
   entry: "./handler.ts",
   environment: {
     AI_MODEL_ID: process.env.AI_MODEL_ID ?? "",
+    AI_SYSTEM_PROMPT: process.env.AI_SYSTEM_PROMPT ?? "",
   },
 });
 

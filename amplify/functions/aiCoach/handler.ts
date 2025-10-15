@@ -9,12 +9,17 @@ import crypto from 'crypto'
 
 const bedrock = new (AWS as any).BedrockRuntime({ region: process.env.AWS_REGION })
 const MODEL_ID = process.env.AI_MODEL_ID || ''
+const SYSTEM_PROMPT_OVERRIDE = process.env.AI_SYSTEM_PROMPT || ''
 
 type SummarizePayload = any
 
 function sha256(text: string){ return crypto.createHash('sha256').update(text).digest('hex') }
 
 function systemPrompt(locale: string){
+  // If custom system prompt is set via environment variable, use it
+  if(SYSTEM_PROMPT_OVERRIDE) return SYSTEM_PROMPT_OVERRIDE
+
+  // Default prompt
   const en = 'You are an analytics coach for a university kendo team. Summarize only from the provided stats. In every figure include the numeric basis (e.g., PF=68, WinRate=55.6%). Do not speculate beyond data. End with three Next Questions.please answer in japanese';
   return en;
 }

@@ -15,7 +15,7 @@ export default function Dashboard(props:{
   masters: { targets: Master[]; methods: Master[] }
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
-  ai?: { apiUrl: string; getToken: ()=>Promise<string> }
+  ai?: { apiUrl: string; getToken: ()=>Promise<string|null> }
 }){
   const { t } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
@@ -26,10 +26,37 @@ export default function Dashboard(props:{
   const [tournamentFilter, setTournamentFilter] = useState<string>('')
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [genderFilter, setGenderFilter] = useState<'all'|'MALE'|'FEMALE'>('all')
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPayload, setAiPayload] = useState<any|null>(null)
+  const [playersEx, setPlayersEx] = useState<Record<string, { name: string; gender?: string|null }>>({})
 
-  const playerList = useMemo(() => Object.entries(players).sort((a,b)=> a[1].localeCompare(b[1],'ja')), [players])
+  // Fetch players with gender info
+  useEffect(()=>{
+    async function fetchPlayersEx(){
+      try{
+        const token = await ai?.getToken(); if(!token || !ai) return
+        const q = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name gender } nextToken } }`
+        let nextToken: string | null = null; const map: Record<string, { name: string; gender?: string|null }> = {}
+        do{
+          const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token as string }, body: JSON.stringify({ query: q, variables:{ limit:200, nextToken } }) })
+          const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+          for(const p of j.data.listPlayers.items){ map[p.id] = { name: p.name, gender: p.gender } }
+          nextToken = j.data.listPlayers.nextToken
+        } while(nextToken)
+        setPlayersEx(map)
+      }catch{}
+    }
+    fetchPlayersEx()
+  }, [])
+
+  const playerList = useMemo(() => {
+    let list = Object.entries(players)
+    if(genderFilter !== 'all'){
+      list = list.filter(([id])=> playersEx[id]?.gender === genderFilter)
+    }
+    return list.sort((a,b)=> a[1].localeCompare(b[1],'ja'))
+  }, [players, playersEx, genderFilter])
 
   // Persist filter in localStorage (share same key with App to keep consistent)
   useEffect(()=>{
@@ -109,15 +136,25 @@ export default function Dashboard(props:{
     let acc = 0
     const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
     const paths = items.map(([label,v],i)=>{
-      const a0 = (acc/total)*2*Math.PI; acc += v; const a1 = (acc/total)*2*Math.PI
+      const a0 = (acc/total)*2*Math.PI - Math.PI/2; acc += v; const a1 = (i === items.length - 1) ? (2*Math.PI - Math.PI/2) : ((acc/total)*2*Math.PI - Math.PI/2)
       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
       return (<path key={i} d={d} fill={palette[i%palette.length]} stroke="#fff" strokeWidth={1} />)
     })
+    const legend = items.map(([label,v],i)=>{
+      const pct = ((v/total)*100).toFixed(1)
+      return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
+        <div style={{ width:12, height:12, background: palette[i%palette.length], border:'1px solid #ccc', flexShrink:0 }}></div>
+        <span>{label} ({pct}%)</span>
+      </div>)
+    })
     return (
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>
+      <div>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>
+        <div style={{ marginTop:8 }}>{legend}</div>
+      </div>
     )
   }
 
@@ -138,11 +175,16 @@ export default function Dashboard(props:{
             <option value="practice">{t('filters.practice')}</option>
             <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
           </SelectField>
+          <SelectField label={t('filters.gender') || 'Gender'} value={genderFilter} onChange={e=> setGenderFilter(e.target.value as any)} size="small" width="10rem">
+            <option value="all">{t('filters.all')}</option>
+            <option value="MALE">{t('gender.MALE') || '男子'}</option>
+            <option value="FEMALE">{t('gender.FEMALE') || '女子'}</option>
+          </SelectField>
           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
           <SelectField label={t('dashboard.topN')} value={String(topN)} onChange={e=> setTopN(Number(e.target.value))} size="small" width="10rem">
             {[5,10,15].map(n=> (<option key={n} value={n}>{n}</option>))}
           </SelectField>
-          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all') }}>{t('dashboard.clear')}</Button>
+          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all'); setGenderFilter('all') }}>{t('dashboard.clear')}</Button>
         </Flex>
       </View>
 

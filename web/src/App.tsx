@@ -20,11 +20,11 @@ type Match = { id: string; heldOn: string; tournament?: string; isOfficial?: boo
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; ourPosition?: string; ourStance?: string; opponentStance?: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
 type Point = { id?: string; tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
 
-const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn tournament isOfficial ourUniversityId opponentUniversityId bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId points{ items{ id tSec target methods scorerPlayerId judgement } } } } } nextToken } }`
+const listMatchesPage = `query ListMatches($limit:Int,$nextToken:String){ listMatches(limit:$limit,nextToken:$nextToken){ items{ id heldOn tournament isOfficial ourUniversityId opponentUniversityId videoUrl videoPlaylist bouts{ items{ id ourPlayerId opponentPlayerId ourPosition ourStance opponentStance winType winnerPlayerId videoUrl videoTimestamp points{ items{ id tSec target methods scorerPlayerId judgement } } } } } nextToken } }`
 const listUniversitiesHome = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id isHome } nextToken } }`
 const listUniversitiesNames = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName isHome } nextToken } }`
 const listMastersQuery = `query Masters { listTargetMasters { items { code nameJa nameEn } } listMethodMasters { items { code nameJa nameEn } } listPositionMasters { items { code nameJa nameEn } } }`
-const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name } nextToken } }`
+const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name gender } nextToken } }`
 const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
 const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input) { id } }`
 const deleteBoutMutation = `mutation DeleteBout($input: DeleteBoutInput!) { deleteBout(input:$input) { id } }`
@@ -322,6 +322,7 @@ export default function App() {
                 <TeamDashboard
                   matches={matches as any}
                   universities={universities}
+                  players={players}
                   labelJa={labelJa}
                   homeUniversityId={homeUniversityId}
                   ai={{ apiUrl, getToken }}

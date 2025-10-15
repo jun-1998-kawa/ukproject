@@ -94,14 +94,14 @@ function IpponCell(props: {
           })}
         </div>
       )}
-      <SelectField labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
+      <SelectField label="" labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
         <option value=""></option>
         {targets.map(tgt=> (
           <option key={tgt.code} value={tgt.code}>{i18n.language.startsWith('ja') ? (tgt.nameJa ?? tgt.nameEn ?? tgt.code) : (tgt.nameEn ?? tgt.code)}</option>
         ))}
       </SelectField>
       <div style={{ gridColumn:'1 / 2', display:'flex', alignItems:'center', gap:4 }}>
-        <TextField labelHidden placeholder={t('ipponCell.secondsPlaceholder')} value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="40px" style={{ padding:'2px 4px' }} />
+        <TextField label="" labelHidden placeholder={t('ipponCell.secondsPlaceholder')} value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="40px" style={{ padding:'2px 4px' }} />
         <span style={{ fontSize:10, color:'#666' }}>s</span>
       </div>
     </div>
@@ -136,6 +136,8 @@ export default function NewEntryMode(props: {
   const [ourUniversityId, setOurUniversityId] = useState<string>('')
   const [opponentUniversityId, setOpponentUniversityId] = useState<string>('')
   const [isOfficial, setIsOfficial] = useState<boolean>(true)
+  const [videoUrl, setVideoUrl] = useState<string>('')
+  const [videoPlaylist, setVideoPlaylist] = useState<string>('')
   const [refError, setRefError] = useState<string|undefined>(undefined)
   const [dense, setDense] = useState<boolean>(true)
   // Fallback masters when API returns empty in prod
@@ -230,9 +232,10 @@ export default function NewEntryMode(props: {
   function techniqueKey(target: string, methods: string[]) { return `${target}:${[...methods].sort().join('+')}` }
 
   const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
-  const createMatchMutation = `mutation CreateMatch($input: CreateMatchInput!) { createMatch(input:$input){ id heldOn tournament isOfficial ourUniversityId opponentUniversityId } }`
+  const createMatchMutation = `mutation CreateMatch($input: CreateMatchInput!) { createMatch(input:$input){ id heldOn tournament isOfficial ourUniversityId opponentUniversityId videoUrl videoPlaylist } }`
   const createBoutMutation = `mutation CreateBout($input: CreateBoutInput!) { createBout(input:$input){ id ourPlayerId opponentPlayerId } }`
   const updateBoutMutation = `mutation UpdateBout($input: UpdateBoutInput!) { updateBout(input:$input){ id winType winnerPlayerId } }`
+  const updateMatchMutation = `mutation UpdateMatch($input: UpdateMatchInput!) { updateMatch(input:$input){ id videoUrl videoPlaylist } }`
   const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input){ id } }`
   const deleteBoutMutation = `mutation DeleteBout($input: DeleteBoutInput!) { deleteBout(input:$input){ id } }`
   const deleteMatchMutation = `mutation DeleteMatch($input: DeleteMatchInput!) { deleteMatch(input:$input){ id } }`
@@ -330,10 +333,14 @@ export default function NewEntryMode(props: {
     if(!useMatchId){
       if(!heldOn){ alert(t('alerts.enterDate')); return }
       if(!ourUniversityId || !opponentUniversityId){ alert(t('alerts.selectUniversities')); return }
-      const input:any = { heldOn, tournament: tournament||null, isOfficial, ourUniversityId, opponentUniversityId }
+      const input:any = { heldOn, tournament: tournament||null, isOfficial, ourUniversityId, opponentUniversityId, videoUrl: videoUrl||null, videoPlaylist: videoPlaylist||null }
       const r= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createMatchMutation, variables:{ input } })});
       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
       useMatchId = j.data.createMatch.id; setMatchId(useMatchId)
+    } else if(matchId && (videoUrl || videoPlaylist)){
+      // Update existing match with video links
+      const input:any = { id: matchId, videoUrl: videoUrl||null, videoPlaylist: videoPlaylist||null }
+      await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:updateMatchMutation, variables:{ input } })});
     }
     const boutInput:any = { matchId: useMatchId, ourPlayerId: newLeft, opponentPlayerId: newRight, ourPosition:null, ourStance:null, opponentStance:null, winType:null }
     const r2= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createBoutMutation, variables:{ input:boutInput } })});
@@ -376,6 +383,8 @@ export default function NewEntryMode(props: {
           <option value="">{t('placeholders.unselected')}</option>
           {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
         </SelectField>
+        <TextField label="Video URL" placeholder="https://..." value={videoUrl} onChange={e=> setVideoUrl(e.target.value)} width={dense?"16rem":"20rem"} />
+        <TextField label="Playlist URL" placeholder="https://..." value={videoPlaylist} onChange={e=> setVideoPlaylist(e.target.value)} width={dense?"16rem":"20rem"} />
         <Button size="small" variation="primary" onClick={saveAll} isDisabled={bouts.length===0}>{t('actions.saveAll')}</Button>
         {matchId && (
           <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'match', targetId: matchId, bout: null })}>{t('actions.deleteMatch')}</Button>
