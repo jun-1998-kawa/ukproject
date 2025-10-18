@@ -1,8 +1,8 @@
 {
-  "labels": {"match": "Match/Date","tournament": "Tournament","date": "Date","ourUniversity": "Our Univ.","opponentUniversity": "Opponent Univ.","searchPlayer": "Search Player","universityUnknown": "Unknown affiliation","official":"Official","practice":"Practice","intra":"Intra-squad"},
+  "labels": {"match": "Match/Date","tournament": "Tournament","date": "Date","ourUniversity": "Our Univ.","opponentUniversity": "Opponent Univ.","searchPlayer": "Search Player","universityUnknown": "Unknown affiliation","official":"Official","practice":"Practice","intra":"Intra-squad","playerName":"Player Name","university":"University","gender":"Gender","stance":"Stance"},
   "columns": {"leftPlayer": "Left Player","rightPlayer": "Right Player","first": "1st","second": "2nd","actions": "Actions"},
-  "actions": {"saveAll": "Save All","switchStandard": "Switch to standard","switchDense": "Switch to dense","reloadRefs": "Reload refs","add": "Add","save": "Save","foulPlus": "Foul +","foulMinus": "Foul -","foul": "Foul","delete": "Delete","deleteMatch":"Delete match","purgeAllMatches":"Delete All Matches"},
-  "placeholders": {"select": "Select...","unselected": "Unselected","nameFilter": "Name filter","selectLeft": "Select left player","selectRight": "Select right player"},
+  "actions": {"saveAll": "Save All","switchStandard": "Switch to standard","switchDense": "Switch to dense","reloadRefs": "Reload refs","add": "Add","save": "Save","foulPlus": "Foul +","foulMinus": "Foul -","foul": "Foul","delete": "Delete","deleteMatch":"Delete match","purgeAllMatches":"Delete All Matches","newPlayer":"New Player","register":"Register"},
+  "placeholders": {"select": "Select...","unselected": "Unselected","nameFilter": "Name filter","selectLeft": "Select left player","selectRight": "Select right player","enterPlayerName": "Enter player name"},
   "ipponCell": {"chooseMethods": "Choose methods","closeMethods": "Close methods","targetPlaceholder": "Target","secondsPlaceholder": "s"},
   "badges": {"opponentFoulIppon": "Opponent foul ippon","foulIppon": "Foul ippon","foulCountFmt": "Fouls: {{count}} (2 gives opponent ippon)"},
   "warnings": {"incompleteInputs": "Some inputs are incomplete"},

@@ -9,7 +9,11 @@
                    "universityUnknown":  "所属未設定",
                    "official":  "公式戦",
                    "practice":  "練習試合",
-                   "intra":  "部内戦"
+                   "intra":  "部内戦",
+                   "playerName":  "選手名",
+                   "university":  "所属",
+                   "gender":  "性別",
+                   "stance":  "構え"
                },
     "columns":  {
                     "leftPlayer":  "左選手",
@@ -30,14 +34,17 @@
                     "foul":  "反則",
                     "delete":  "削除",
                     "deleteMatch":  "試合を削除",
-                    "purgeAllMatches":  "試合データ全削除"
+                    "purgeAllMatches":  "試合データ全削除",
+                    "newPlayer":  "新規選手登録",
+                    "register":  "登録"
                 },
     "placeholders":  {
                          "select":  "選択してください",
                          "unselected":  "未選択",
                          "nameFilter":  "名前フィルタ",
                          "selectLeft":  "左選手を選択",
-                         "selectRight":  "右選手を選択"
+                         "selectRight":  "右選手を選択",
+                         "enterPlayerName":  "選手名を入力"
                      },
     "ipponCell":  {
                       "chooseMethods":  "技を選択",
