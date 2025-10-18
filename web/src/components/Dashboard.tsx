@@ -386,19 +386,30 @@ export default function Dashboard(props:{
     const r = size/2, cx=r, cy=r
     const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
 
+    // Generate stable color index from label
+    const getColorIndex = (label: string) => {
+      let hash = 0
+      for(let i=0; i<label.length; i++){
+        hash = ((hash << 5) - hash) + label.charCodeAt(i)
+        hash = hash & hash // Convert to 32bit integer
+      }
+      return Math.abs(hash) % palette.length
+    }
+
     // Special case: only one item (100%)
     if(items.length === 1){
       const [label, v] = items[0]
       const pct = ((v/total)*100).toFixed(1)
+      const color = palette[getColorIndex(label)]
       return (
         <div>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-            <circle cx={cx} cy={cy} r={r} fill={palette[0]} stroke="#fff" strokeWidth={1} />
+            <circle cx={cx} cy={cy} r={r} fill={color} stroke="#fff" strokeWidth={1} />
           </svg>
           <div style={{ marginTop:8 }}>
             <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
-              <div style={{ width:12, height:12, background: palette[0], border:'1px solid #ccc', flexShrink:0 }}></div>
-              <span>{label} ({pct}%)</span>
+              <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
+              <span>{label} ({v}本, {pct}%)</span>
             </div>
           </div>
         </div>
@@ -412,13 +423,15 @@ export default function Dashboard(props:{
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
-      return (<path key={i} d={d} fill={palette[i%palette.length]} stroke="#fff" strokeWidth={1} />)
+      const color = palette[getColorIndex(label)]
+      return (<path key={i} d={d} fill={color} stroke="#fff" strokeWidth={1} />)
     })
     const legend = items.map(([label,v],i)=>{
       const pct = ((v/total)*100).toFixed(1)
+      const color = palette[getColorIndex(label)]
       return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
-        <div style={{ width:12, height:12, background: palette[i%palette.length], border:'1px solid #ccc', flexShrink:0 }}></div>
-        <span>{label} ({pct}%)</span>
+        <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
+        <span>{label} ({v}本, {pct}%)</span>
       </div>)
     })
     return (
@@ -516,17 +529,23 @@ export default function Dashboard(props:{
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stat.vsTop.map(([oppId, v])=> (
-                  <TableRow key={oppId}>
-                    <TableCell>{players[oppId] ?? oppId}</TableCell>
-                    <TableCell>{v.bouts}</TableCell>
-                    <TableCell>{v.wins}</TableCell>
-                    <TableCell>{v.losses}</TableCell>
-                    <TableCell>{v.draws}</TableCell>
-                    <TableCell>{v.pf}</TableCell>
-                    <TableCell>{v.pa}</TableCell>
-                  </TableRow>
-                ))}
+                {stat.vsTop.map(([oppId, v])=> {
+                  const playerName = players[oppId] ?? oppId
+                  const playerInfo = playersEx[oppId]
+                  const uniName = playerInfo?.universityId ? (universities[playerInfo.universityId] || '') : ''
+                  const displayName = uniName ? `${playerName}（${uniName}）` : playerName
+                  return (
+                    <TableRow key={oppId}>
+                      <TableCell>{displayName}</TableCell>
+                      <TableCell>{v.bouts}</TableCell>
+                      <TableCell>{v.wins}</TableCell>
+                      <TableCell>{v.losses}</TableCell>
+                      <TableCell>{v.draws}</TableCell>
+                      <TableCell>{v.pf}</TableCell>
+                      <TableCell>{v.pa}</TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
           </Table>
         </View>

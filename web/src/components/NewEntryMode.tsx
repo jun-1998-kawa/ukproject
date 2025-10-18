@@ -75,7 +75,7 @@ export default function NewEntryMode(props: {
   const safeTargets = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets
   const safeMethods = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods
   const [focusBoutId, setFocusBoutId] = useState<string>('')
-  const [allowEncho, setAllowEncho] = useState<boolean>(true)
+  const [allowEncho, setAllowEncho] = useState<boolean>(false)
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
   const [savingId, setSavingId] = useState<string>('')
