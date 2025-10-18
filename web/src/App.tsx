@@ -40,7 +40,7 @@ export default function App() {
   const [labelJa, setLabelJa] = useState<{ target: Record<string,string>, method: Record<string,string>, position: Record<string,string> }>({ target: {}, method: {}, position: {} })
   const [selectedMatchId, setSelectedMatchId] = useState('')
   const [selectedBoutId, setSelectedBoutId] = useState('')
-  const [tab, setTab] = useState<'new'|'players'|'universities'|'dashboard'>('new')
+  const [tab, setTab] = useState<'home'|'new'|'players'|'universities'|'dashboard'>('home')
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
   const [homeUniversityId, setHomeUniversityId] = useState<string>('')
   const [universities, setUniversities] = useState<Record<string,string>>({})
@@ -278,6 +278,7 @@ export default function App() {
           </header>
           <aside className="app-sidebar">
             <nav style={{ display:'grid', gap:6 }}>
+              <a className={`nav-item${tab==='home'?' active':''}`} onClick={()=> setTab('home')}>{i18n.language?.startsWith('ja') ? 'ホーム' : 'Home'}</a>
               <a className={`nav-item${tab==='dashboard'?' active':''}`} onClick={()=> setTab('dashboard')}>{t('tab.dashboard')}</a>
               <a className={`nav-item${tab==='new'?' active':''}`} onClick={()=> setTab('new')}>{t('tab.new')}</a>
               <hr />
@@ -287,6 +288,114 @@ export default function App() {
             </nav>
           </aside>
           <main className="app-main">
+            {tab==='home' && (
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'70vh', padding:'2rem' }}>
+                <h1 style={{
+                  fontSize: '5rem',
+                  fontFamily: '"Noto Serif JP", "游明朝", "Yu Mincho", "YuMincho", serif',
+                  fontWeight: 700,
+                  color: '#1a1a1a',
+                  marginBottom: '0.5rem',
+                  letterSpacing: '0.1em',
+                  textShadow: '2px 2px 4px rgba(0,0,0,0.1)'
+                }}>
+                  剣道DB
+                </h1>
+                <p style={{
+                  fontSize: '1.5rem',
+                  fontFamily: '"Brush Script MT", cursive',
+                  fontStyle: 'italic',
+                  color: '#666',
+                  marginBottom: '3rem',
+                  letterSpacing: '0.05em'
+                }}>
+                  KENDO DB
+                </p>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(240px, 1fr))', gap:'1.5rem', maxWidth:'800px', width:'100%' }}>
+                  <button
+                    onClick={()=> setTab('dashboard')}
+                    style={{
+                      padding:'2rem',
+                      background:'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color:'white',
+                      border:'none',
+                      borderRadius:'12px',
+                      fontSize:'1.25rem',
+                      fontWeight:600,
+                      cursor:'pointer',
+                      boxShadow:'0 4px 15px rgba(102,126,234,0.4)',
+                      transition:'transform 0.2s, box-shadow 0.2s',
+                      fontFamily: '"Noto Sans JP", sans-serif'
+                    }}
+                    onMouseOver={e=> { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(102,126,234,0.5)' }}
+                    onMouseOut={e=> { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(102,126,234,0.4)' }}
+                  >
+                    📊 {t('tab.dashboard') || 'ダッシュボード'}
+                  </button>
+                  <button
+                    onClick={()=> setTab('new')}
+                    style={{
+                      padding:'2rem',
+                      background:'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                      color:'white',
+                      border:'none',
+                      borderRadius:'12px',
+                      fontSize:'1.25rem',
+                      fontWeight:600,
+                      cursor:'pointer',
+                      boxShadow:'0 4px 15px rgba(240,147,251,0.4)',
+                      transition:'transform 0.2s, box-shadow 0.2s',
+                      fontFamily: '"Noto Sans JP", sans-serif'
+                    }}
+                    onMouseOver={e=> { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(240,147,251,0.5)' }}
+                    onMouseOut={e=> { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(240,147,251,0.4)' }}
+                  >
+                    ⚔️ {t('tab.new') || '新規入力'}
+                  </button>
+                  <button
+                    onClick={()=> setTab('players')}
+                    style={{
+                      padding:'2rem',
+                      background:'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                      color:'white',
+                      border:'none',
+                      borderRadius:'12px',
+                      fontSize:'1.25rem',
+                      fontWeight:600,
+                      cursor:'pointer',
+                      boxShadow:'0 4px 15px rgba(79,172,254,0.4)',
+                      transition:'transform 0.2s, box-shadow 0.2s',
+                      fontFamily: '"Noto Sans JP", sans-serif'
+                    }}
+                    onMouseOver={e=> { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(79,172,254,0.5)' }}
+                    onMouseOut={e=> { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(79,172,254,0.4)' }}
+                  >
+                    👥 {t('nav.playersRegister') || '選手管理'}
+                  </button>
+                  <button
+                    onClick={()=> setTab('universities')}
+                    style={{
+                      padding:'2rem',
+                      background:'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                      color:'white',
+                      border:'none',
+                      borderRadius:'12px',
+                      fontSize:'1.25rem',
+                      fontWeight:600,
+                      cursor:'pointer',
+                      boxShadow:'0 4px 15px rgba(67,233,123,0.4)',
+                      transition:'transform 0.2s, box-shadow 0.2s',
+                      fontFamily: '"Noto Sans JP", sans-serif'
+                    }}
+                    onMouseOver={e=> { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(67,233,123,0.5)' }}
+                    onMouseOut={e=> { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(67,233,123,0.4)' }}
+                  >
+                    🏫 {t('nav.universities') || '大学管理'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {tab==='new' ? (
               <NewEntryMode
                 matchId={selectedMatchId}
