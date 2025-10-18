@@ -101,7 +101,7 @@ export default function UniversitiesAdmin(props:{ apiUrl:string; getToken: ()=> 
   return (
     <View>
       <Heading level={5}>{t('admin.universities.title')}</Heading>
-      <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap'}}>
+      <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap'}}>
         <TextField label={t('admin.universities.search')} placeholder={t('placeholders.nameFilter')} value={filter} onChange={e=> setFilter(e.target.value)} width="16rem" />
         <TextField label={t('admin.universities.newName')} value={newName} onChange={e=> setNewName(e.target.value)} width="16rem" />
         <TextField label={t('admin.universities.shortName')} value={newShort} onChange={e=> setNewShort(e.target.value)} width="10rem" />
@@ -124,13 +124,13 @@ export default function UniversitiesAdmin(props:{ apiUrl:string; getToken: ()=> 
           {visible.map(u => (
             <TableRow key={u.id}>
               <TableCell>
-                <TextField labelHidden value={u.name} onChange={e=> { const v=e.target.value; setList(list=> list.map(x=> x.id===u.id? {...x, name:v}: x)) }} />
+                <TextField label="Name" labelHidden value={u.name} onChange={e=> { const v=e.target.value; setList(list=> list.map(x=> x.id===u.id? {...x, name:v}: x)) }} />
               </TableCell>
               <TableCell>
-                <TextField labelHidden value={u.shortName ?? ''} onChange={e=> { const v=e.target.value; setList(list=> list.map(x=> x.id===u.id? {...x, shortName:v||null}: x)) }} />
+                <TextField label="ShortName" labelHidden value={u.shortName ?? ''} onChange={e=> { const v=e.target.value; setList(list=> list.map(x=> x.id===u.id? {...x, shortName:v||null}: x)) }} />
               </TableCell>
               <TableCell>
-                <TextField labelHidden value={u.code ?? ''} onChange={e=> { const v=e.target.value; setList(list=> list.map(x=> x.id===u.id? {...x, code:v||null}: x)) }} />
+                <TextField label="Code" labelHidden value={u.code ?? ''} onChange={e=> { const v=e.target.value; setList(list=> list.map(x=> x.id===u.id? {...x, code:v||null}: x)) }} />
               </TableCell>
               <TableCell>
                 <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>

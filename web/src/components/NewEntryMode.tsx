@@ -26,6 +26,10 @@ type Bout = {
   ourPosition?: string;
   ourStance?: string;
   opponentStance?: string;
+  winType?: string | null;
+  winnerPlayerId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   points?: { items: { id: string; tSec: number; target?: string|null; methods?: string[]|null; scorerPlayerId?: string|null; judgement?: string|null }[] }
 }
 type University = { id: string; name: string; shortName?: string|null }
@@ -323,15 +327,22 @@ export default function NewEntryMode(props: {
   }
   function getPlayerName(playerId: string){ return playersEx.find(p=> p.id===playerId)?.name ?? players[playerId] ?? playerId }
 
-  // Sort bouts by ID to ensure consistent display order (newly added bouts appear at the bottom)
+  // Sort bouts by createdAt to maintain input order (newly added bouts appear at the bottom)
   const sortedBouts = useMemo(() => {
-    return [...boutsLocal].sort((a, b) => a.id.localeCompare(b.id))
+    return [...boutsLocal].sort((a, b) => {
+      // If createdAt exists, use it for chronological order
+      if (a.createdAt && b.createdAt) {
+        return a.createdAt.localeCompare(b.createdAt)
+      }
+      // Fallback to ID if createdAt is missing
+      return a.id.localeCompare(b.id)
+    })
   }, [boutsLocal])
 
   return (
     <>
     <View>
-      <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'flex-end'}}>
+      <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end'}}>
         <SelectField label={t('labels.match')} value={matchId} onChange={e=> setMatchId(e.target.value)} size="small">
           <option value="">{t('placeholders.select')}</option>
           {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
@@ -358,7 +369,7 @@ export default function NewEntryMode(props: {
         )}
         <Button size="small" variation="link" onClick={()=> setDense(d=> !d)}>{dense? t('actions.switchStandard'):t('actions.switchDense')}</Button>
       </View>
-      <View marginBottom="0.25rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'center'}}>
+      <View marginBottom="0.25rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
         <TextField label={t('labels.searchPlayer')} placeholder={t('placeholders.nameFilter')} value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
         <Button size="small" onClick={loadRefData}>{t('actions.reloadRefs')}</Button>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -524,7 +535,7 @@ export default function NewEntryMode(props: {
                   <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   <Button size="small" onClick={()=> saveRow(b)} isDisabled={!rowValid || savingId===b.id} isLoading={savingId===b.id}>{t('actions.save')}</Button>
                   <Button size="small" variation="link" onClick={()=> setAnalysisModal({ open:true, boutId: b.id, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })}>{t('analysis.addAnalysis')}</Button>
-                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, bout: b })}>{t('actions.delete')}</Button>
+                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'bout', targetId: b.id, bout: b })}>{t('actions.delete')}</Button>
                     {!autoResult && (
                       <>
                         <select value={(resultEdit[b.id]?.winType)|| (b.winType ?? '')} onChange={(e)=> setResultEdit(x=> ({...x, [b.id]: { winType: e.target.value, winner: (resultEdit[b.id]?.winner ?? (b.winnerPlayerId? (b.winnerPlayerId===b.ourPlayerId?'our':'opponent') : '') ) as any }}))} style={{ fontSize:12 }}>

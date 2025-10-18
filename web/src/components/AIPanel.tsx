@@ -5,7 +5,7 @@ type AIPanelProps = {
   open: boolean
   onClose: () => void
   apiUrl: string
-  getToken: () => Promise<string>
+  getToken: () => Promise<string | null>
   payload: any | null
 }
 
