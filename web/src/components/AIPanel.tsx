@@ -41,7 +41,7 @@ export default function AIPanel({ open, onClose, apiUrl, getToken, payload }: AI
     setLoading(true); setError(null)
     try{
       const token = await getToken(); if(!token) throw new Error('No ID token')
-      const query = `mutation($input: AiAskInput!){ aiAsk(input:$input){ text conversationId model } }`
+      const query = `mutation($input: AiAskInputInput!){ aiAsk(input:$input){ text conversationId model } }`
       const input = { question, payload: JSON.stringify(payload), conversationId }
       const res = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization': token }, body: JSON.stringify({ query, variables:{ input } }) })
       const json = await res.json()
