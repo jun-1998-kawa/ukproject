@@ -15,7 +15,7 @@ type Bout = {
 }
 type PointInput = { tSec: number | ''; target: string; methods: string[] }
 type University = { id: string; name: string; shortName?: string|null }
-type PlayerEx = { id: string; name: string; universityId?: string|null }
+type PlayerEx = { id: string; name: string; universityId?: string|null; grade?: number|null }
 
 function IpponCell(props: {
   value: PointInput | null
@@ -85,8 +85,12 @@ function IpponCell(props: {
               <label key={m.code} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, opacity: allowed?1:0.4 }}>
                 <input type="checkbox" disabled={!allowed} checked={checked && allowed} onChange={(e)=>{
                   onFocus?.();
-                  if(e.target.checked) onChange({ ...v, methods: [...v.methods, m.code] })
-                  else onChange({ ...v, methods: v.methods.filter(x=> x!==m.code) })
+                  if(e.target.checked) {
+                    onChange({ ...v, methods: [...v.methods, m.code] })
+                    setTimeout(() => setOpen(false), 200)
+                  } else {
+                    onChange({ ...v, methods: v.methods.filter(x=> x!==m.code) })
+                  }
                 }} />
                 <span>{i18n.language.startsWith('ja') ? (m.nameJa ?? m.nameEn ?? m.code) : (m.nameEn ?? m.code)}</span>
               </label>
@@ -131,10 +135,15 @@ export default function NewEntryMode(props: {
   const [newLeft, setNewLeft] = useState<string>('')
   const [newRight, setNewRight] = useState<string>('')
   const [playerFilter, setPlayerFilter] = useState('')
+  const [leftSearch, setLeftSearch] = useState<string>('')
+  const [rightSearch, setRightSearch] = useState<string>('')
+  const [leftSuggestOpen, setLeftSuggestOpen] = useState<boolean>(false)
+  const [rightSuggestOpen, setRightSuggestOpen] = useState<boolean>(false)
   const [universities, setUniversities] = useState<University[]>([])
   const [playersEx, setPlayersEx] = useState<PlayerEx[]>([])
   const [ourUniversityId, setOurUniversityId] = useState<string>('')
   const [opponentUniversityId, setOpponentUniversityId] = useState<string>('')
+  const [newPlayerModal, setNewPlayerModal] = useState<{ open: boolean; side: 'left'|'right'; name: string; universityId: string; gender: string; stance: string }>({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })
   const [isOfficial, setIsOfficial] = useState<boolean>(true)
   const [videoUrl, setVideoUrl] = useState<string>('')
   const [videoPlaylist, setVideoPlaylist] = useState<string>('')
@@ -188,8 +197,8 @@ export default function NewEntryMode(props: {
       let ntU: string | null = null; const accU: University[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qU, variables:{ limit:200, nextToken: ntU } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accU.push(...j.data.listUniversities.items); ntU=j.data.listUniversities.nextToken } while(ntU)
       setUniversities(accU)
-      // players with universityId
-      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId } nextToken } }`
+      // players with universityId and grade
+      const qP = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name universityId grade } nextToken } }`
       let ntP: string | null = null; const accP: PlayerEx[] = []
       do{ const r = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: qP, variables:{ limit:200, nextToken: ntP } }) }); const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors)); accP.push(...j.data.listPlayers.items); ntP=j.data.listPlayers.nextToken } while(ntP)
       setPlayersEx(accP)
@@ -234,6 +243,7 @@ export default function NewEntryMode(props: {
   const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
   const createMatchMutation = `mutation CreateMatch($input: CreateMatchInput!) { createMatch(input:$input){ id heldOn tournament isOfficial ourUniversityId opponentUniversityId videoUrl videoPlaylist } }`
   const createBoutMutation = `mutation CreateBout($input: CreateBoutInput!) { createBout(input:$input){ id ourPlayerId opponentPlayerId } }`
+  const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name universityId gender stance } }`
   const updateBoutMutation = `mutation UpdateBout($input: UpdateBoutInput!) { updateBout(input:$input){ id winType winnerPlayerId } }`
   const updateMatchMutation = `mutation UpdateMatch($input: UpdateMatchInput!) { updateMatch(input:$input){ id videoUrl videoPlaylist } }`
   const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input){ id } }`
@@ -345,7 +355,25 @@ export default function NewEntryMode(props: {
     const boutInput:any = { matchId: useMatchId, ourPlayerId: newLeft, opponentPlayerId: newRight, ourPosition:null, ourStance:null, opponentStance:null, winType:null }
     const r2= await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createBoutMutation, variables:{ input:boutInput } })});
     const j2:any= await r2.json(); if(j2.errors) throw new Error(JSON.stringify(j2.errors));
-    const newId = j2.data.createBout.id as string; setFocusBoutId(newId); setNewLeft(''); setNewRight(''); await onSaved()
+    const newId = j2.data.createBout.id as string; setFocusBoutId(newId); setNewLeft(''); setNewRight(''); setLeftSearch(''); setRightSearch(''); await onSaved()
+  }
+
+  async function registerNewPlayer(){
+    const { name, universityId, gender, stance, side } = newPlayerModal
+    if(!name.trim()){ alert(t('errors.universityRequired')); return }
+    if(!universityId){ alert(t('errors.universityRequired')); return }
+    const token = await getToken(); if(!token) return
+    const input:any = { name: name.trim(), universityId, gender: gender||null, stance: stance||null, active: true }
+    const r = await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createPlayerMutation, variables:{ input } })});
+    const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+    const newPlayerId = j.data.createPlayer.id
+    // Set the newly created player
+    if(side === 'left') setNewLeft(newPlayerId)
+    else setNewRight(newPlayerId)
+    // Reload ref data to include new player
+    await loadRefData()
+    // Close modal
+    setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })
   }
 
   function buildPlayerOptionsEx(list: PlayerEx[], unis: University[], filter: string){
@@ -361,6 +389,7 @@ export default function NewEntryMode(props: {
   function rowHasData(s: RowState){
     return ipponIsValid(s.left1) || ipponIsValid(s.left2) || ipponIsValid(s.right1) || ipponIsValid(s.right2) || (s.leftFouls>=2) || (s.rightFouls>=2)
   }
+  function getPlayerName(playerId: string){ return playersEx.find(p=> p.id===playerId)?.name ?? players[playerId] ?? playerId }
 
   return (
     <>
@@ -425,19 +454,81 @@ export default function NewEntryMode(props: {
           </TableRow>
           <TableRow>
             <TableCell>
-              <select value={newLeft} onChange={e=> setNewLeft(e.target.value)} style={{ width:'100%' }}>
-                <option value="">{t('placeholders.selectLeft')}</option>
-                {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
-              </select>
+              <div style={{ display:'flex', flexDirection:'column', gap:4, position:'relative' }}>
+                <input
+                  type="text"
+                  placeholder={t('placeholders.enterPlayerName')}
+                  value={leftSearch}
+                  onChange={e=> { setLeftSearch(e.target.value); setLeftSuggestOpen(true) }}
+                  onFocus={()=> setLeftSuggestOpen(true)}
+                  onBlur={()=> setTimeout(() => setLeftSuggestOpen(false), 200)}
+                  style={{ width:'100%', padding:'4px 6px', fontSize:12, border:'1px solid #ccc', borderRadius:4 }}
+                />
+                {leftSearch.trim() && leftSuggestOpen && (() => {
+                  const filtered = playersEx.filter(p=> p.name.toLowerCase().includes(leftSearch.trim().toLowerCase()))
+                  return filtered.length > 0 ? (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #ccc', borderRadius:4, maxHeight:200, overflowY:'auto', zIndex:10, marginTop:2, boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}>
+                      {filtered.slice(0,10).map(p=> {
+                        const uniName = p.universityId ? (universities.find(u=> u.id===p.universityId)?.shortName || universities.find(u=> u.id===p.universityId)?.name || '') : ''
+                        const gradeText = p.grade ? `${p.grade}年` : ''
+                        const displayText = [p.name, uniName, gradeText].filter(Boolean).join('　')
+                        return (
+                          <div key={p.id} onClick={()=> { setNewLeft(p.id); setLeftSearch(''); setLeftSuggestOpen(false) }} style={{ padding:'6px 8px', fontSize:12, cursor:'pointer', borderBottom:'1px solid #f0f0f0' }} onMouseEnter={e=> (e.currentTarget.style.background='#f5f5f5')} onMouseLeave={e=> (e.currentTarget.style.background='#fff')}>
+                            {displayText}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null
+                })()}
+                {leftSearch.trim() && playersEx.filter(p=> p.name.toLowerCase().includes(leftSearch.trim().toLowerCase())).length === 0 && (
+                  <Button size="small" variation="link" onClick={()=> setNewPlayerModal({ open:true, side:'left', name: leftSearch.trim(), universityId:'', gender:'', stance:'' })} style={{ fontSize:11, padding:'2px 4px' }}>{t('actions.newPlayer')}</Button>
+                )}
+                <select value={newLeft} onChange={e=> { setNewLeft(e.target.value); setLeftSearch('') }} style={{ width:'100%', fontSize:12 }}>
+                  <option value="">{t('placeholders.selectLeft')}</option>
+                  {buildPlayerOptionsEx(playersEx, universities, leftSearch.trim() || playerFilter)}
+                </select>
+              </div>
             </TableCell>
             <TableCell colSpan={3}>
               <div style={{ color:'#666', fontSize:12 }}>{t('hints.addNewMatch')}</div>
             </TableCell>
             <TableCell>
-              <select value={newRight} onChange={e=> setNewRight(e.target.value)} style={{ width:'100%' }}>
-                <option value="">{t('placeholders.selectRight')}</option>
-                {buildPlayerOptionsEx(playersEx, universities, playerFilter)}
-              </select>
+              <div style={{ display:'flex', flexDirection:'column', gap:4, position:'relative' }}>
+                <input
+                  type="text"
+                  placeholder={t('placeholders.enterPlayerName')}
+                  value={rightSearch}
+                  onChange={e=> { setRightSearch(e.target.value); setRightSuggestOpen(true) }}
+                  onFocus={()=> setRightSuggestOpen(true)}
+                  onBlur={()=> setTimeout(() => setRightSuggestOpen(false), 200)}
+                  style={{ width:'100%', padding:'4px 6px', fontSize:12, border:'1px solid #ccc', borderRadius:4 }}
+                />
+                {rightSearch.trim() && rightSuggestOpen && (() => {
+                  const filtered = playersEx.filter(p=> p.name.toLowerCase().includes(rightSearch.trim().toLowerCase()))
+                  return filtered.length > 0 ? (
+                    <div style={{ position:'absolute', top:'100%', left:0, right:0, background:'#fff', border:'1px solid #ccc', borderRadius:4, maxHeight:200, overflowY:'auto', zIndex:10, marginTop:2, boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}>
+                      {filtered.slice(0,10).map(p=> {
+                        const uniName = p.universityId ? (universities.find(u=> u.id===p.universityId)?.shortName || universities.find(u=> u.id===p.universityId)?.name || '') : ''
+                        const gradeText = p.grade ? `${p.grade}年` : ''
+                        const displayText = [p.name, uniName, gradeText].filter(Boolean).join('　')
+                        return (
+                          <div key={p.id} onClick={()=> { setNewRight(p.id); setRightSearch(''); setRightSuggestOpen(false) }} style={{ padding:'6px 8px', fontSize:12, cursor:'pointer', borderBottom:'1px solid #f0f0f0' }} onMouseEnter={e=> (e.currentTarget.style.background='#f5f5f5')} onMouseLeave={e=> (e.currentTarget.style.background='#fff')}>
+                            {displayText}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : null
+                })()}
+                {rightSearch.trim() && playersEx.filter(p=> p.name.toLowerCase().includes(rightSearch.trim().toLowerCase())).length === 0 && (
+                  <Button size="small" variation="link" onClick={()=> setNewPlayerModal({ open:true, side:'right', name: rightSearch.trim(), universityId:'', gender:'', stance:'' })} style={{ fontSize:11, padding:'2px 4px' }}>{t('actions.newPlayer')}</Button>
+                )}
+                <select value={newRight} onChange={e=> { setNewRight(e.target.value); setRightSearch('') }} style={{ width:'100%', fontSize:12 }}>
+                  <option value="">{t('placeholders.selectRight')}</option>
+                  {buildPlayerOptionsEx(playersEx, universities, rightSearch.trim() || playerFilter)}
+                </select>
+              </div>
             </TableCell>
             <TableCell>
               <Button size="small" onClick={addNewBout} isDisabled={!newLeft || !newRight}>{t('actions.add')}</Button>
@@ -453,7 +544,7 @@ export default function NewEntryMode(props: {
               <TableRow key={b.id} id={`row-${b.id}`}>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#156a15' : '#2f4f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{players[b.ourPlayerId] ?? b.ourPlayerId}</div>
+                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#156a15' : '#2f4f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{getPlayerName(b.ourPlayerId)}</div>
                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                       <Button size="small" variation="link" title={t('actions.foulMinus')} onClick={()=> setRows(r=> ({...r, [b.id]: { ...s, leftFouls: Math.max(0, (s.leftFouls||0)-1) }}))} style={{ minWidth:22, padding:'0 4px' }}>-</Button>
                       <Badge variation={s.leftFouls>=2? 'warning':'info'} style={{ padding:'0 6px' }}>{s.leftFouls||0}</Badge>
@@ -478,7 +569,7 @@ export default function NewEntryMode(props: {
                 </TableCell>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
-                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#8a1b1b' : '#4f2f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{players[b.opponentPlayerId] ?? b.opponentPlayerId}</div>
+                    <div style={{ fontWeight: focusBoutId===b.id ? 700 : 600, color: focusBoutId===b.id ? '#8a1b1b' : '#4f2f2f', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{getPlayerName(b.opponentPlayerId)}</div>
                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                       <Button size="small" variation="link" title={t('actions.foulMinus')} onClick={()=> setRows(r=> ({...r, [b.id]: { ...s, rightFouls: Math.max(0, (s.rightFouls||0)-1) }}))} style={{ minWidth:22, padding:'0 4px' }}>-</Button>
                       <Badge variation={s.rightFouls>=2? 'warning':'info'} style={{ padding:'0 6px' }}>{s.rightFouls||0}</Badge>
@@ -539,7 +630,7 @@ export default function NewEntryMode(props: {
             </>)}
           </div>
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-            <Button onClick={()=> setDelModal(null)} variation="link">{t('action.cancel')||'Cancel'}</Button>
+            <Button onClick={()=> setDelModal(null)} variation="link">{t('action.cancel')}</Button>
             <Button variation="warning" onClick={async()=>{
               try{
                 if(delModal.kind==='bout' && delModal.bout){ await deleteBoutDeep(delModal.bout) }
@@ -548,7 +639,49 @@ export default function NewEntryMode(props: {
                 if(delModal.kind==='match'){ setBoutsLocal([]); setRows({}) }
                 setDelModal(null); await onSaved()
               }catch(e){ alert(String(e)) }
-            }}>{t('action.delete')||'Delete'}</Button>
+            }}>{t('action.delete')}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    {newPlayerModal.open && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNewPlayerModal({ ...newPlayerModal, open: false })}>
+        <div style={{ background:'#fff', minWidth:360, maxWidth:520, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <h4 style={{ marginTop:0 }}>{t('actions.newPlayer')}</h4>
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.playerName')}</label>
+              <input type="text" value={newPlayerModal.name} onChange={e=> setNewPlayerModal({ ...newPlayerModal, name: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.university')}</label>
+              <select value={newPlayerModal.universityId} onChange={e=> setNewPlayerModal({ ...newPlayerModal, universityId: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
+                <option value="">{t('placeholders.select')}</option>
+                {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.gender')}</label>
+              <select value={newPlayerModal.gender} onChange={e=> setNewPlayerModal({ ...newPlayerModal, gender: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
+                <option value="">{t('placeholders.select')}</option>
+                <option value="MALE">{t('gender.MALE')}</option>
+                <option value="FEMALE">{t('gender.FEMALE')}</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.stance')}</label>
+              <select value={newPlayerModal.stance} onChange={e=> setNewPlayerModal({ ...newPlayerModal, stance: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
+                <option value="">{t('placeholders.select')}</option>
+                <option value="JODAN">{t('stance.JODAN')}</option>
+                <option value="CHUDAN">{t('stance.CHUDAN')}</option>
+                <option value="NITOU_SHO">{t('stance.NITOU_SHO')}</option>
+                <option value="NITOU_GYAKU">{t('stance.NITOU_GYAKU')}</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
+            <Button onClick={()=> setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })} variation="link">{t('action.cancel')}</Button>
+            <Button variation="primary" onClick={registerNewPlayer} isDisabled={!newPlayerModal.name.trim() || !newPlayerModal.universityId}>{t('actions.register')}</Button>
           </div>
         </div>
       </div>

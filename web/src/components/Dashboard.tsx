@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex, RadioGroupField, Radio } from '@aws-amplify/ui-react'
 import AIPanel from './AIPanel'
 
 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
@@ -8,6 +8,7 @@ type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType
 type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
 
 type Master = { code: string; nameJa?: string; nameEn?: string }
+type PlayerEx = { name: string; gender?: string|null; universityId?: string|null; grade?: number|null }
 
 export default function Dashboard(props:{
   matches: Match[]
@@ -17,7 +18,7 @@ export default function Dashboard(props:{
   homeUniversityId?: string
   ai?: { apiUrl: string; getToken: ()=>Promise<string|null> }
 }){
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { matches, players, labelJa, homeUniversityId } = props
   const ai = props.ai
   const [playerId, setPlayerId] = useState<string>('')
@@ -27,21 +28,24 @@ export default function Dashboard(props:{
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
   const [genderFilter, setGenderFilter] = useState<'all'|'MALE'|'FEMALE'>('all')
+  const [granularity, setGranularity] = useState<'coarse'|'detailed'>('detailed')
+  const [playerSearch, setPlayerSearch] = useState<string>('')
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPayload, setAiPayload] = useState<any|null>(null)
-  const [playersEx, setPlayersEx] = useState<Record<string, { name: string; gender?: string|null }>>({})
+  const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
+  const [universities, setUniversities] = useState<Record<string, string>>({})
 
-  // Fetch players with gender info
+  // Fetch players with extended info (gender, university, grade)
   useEffect(()=>{
     async function fetchPlayersEx(){
       try{
         const token = await ai?.getToken(); if(!token || !ai) return
-        const q = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name gender } nextToken } }`
-        let nextToken: string | null = null; const map: Record<string, { name: string; gender?: string|null }> = {}
+        const q = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name gender universityId grade } nextToken } }`
+        let nextToken: string | null = null; const map: Record<string, PlayerEx> = {}
         do{
           const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token as string }, body: JSON.stringify({ query: q, variables:{ limit:200, nextToken } }) })
           const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
-          for(const p of j.data.listPlayers.items){ map[p.id] = { name: p.name, gender: p.gender } }
+          for(const p of j.data.listPlayers.items){ map[p.id] = { name: p.name, gender: p.gender, universityId: p.universityId, grade: p.grade } }
           nextToken = j.data.listPlayers.nextToken
         } while(nextToken)
         setPlayersEx(map)
@@ -50,13 +54,47 @@ export default function Dashboard(props:{
     fetchPlayersEx()
   }, [])
 
-  const playerList = useMemo(() => {
-    let list = Object.entries(players)
-    if(genderFilter !== 'all'){
-      list = list.filter(([id])=> playersEx[id]?.gender === genderFilter)
+  // Fetch universities
+  useEffect(()=>{
+    async function fetchUniversities(){
+      try{
+        const token = await ai?.getToken(); if(!token || !ai) return
+        const q = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+        let nextToken: string | null = null; const map: Record<string, string> = {}
+        do{
+          const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token as string }, body: JSON.stringify({ query: q, variables:{ limit:200, nextToken } }) })
+          const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+          for(const u of j.data.listUniversities.items){ map[u.id] = u.shortName || u.name || u.id }
+          nextToken = j.data.listUniversities.nextToken
+        } while(nextToken)
+        setUniversities(map)
+      }catch{}
     }
-    return list.sort((a,b)=> a[1].localeCompare(b[1],'ja'))
-  }, [players, playersEx, genderFilter])
+    fetchUniversities()
+  }, [])
+
+  const playerList = useMemo(() => {
+    let list = Object.entries(players).map(([id, name]) => {
+      const info = playersEx[id]
+      const uniName = info?.universityId ? universities[info.universityId] || '' : ''
+      const gradeText = info?.grade ? `${info.grade}年` : ''
+      const displayName = [name, uniName, gradeText].filter(Boolean).join('　')
+      return { id, name, displayName, info }
+    })
+
+    // Gender filter
+    if(genderFilter !== 'all'){
+      list = list.filter(p=> p.info?.gender === genderFilter)
+    }
+
+    // Search filter
+    if(playerSearch.trim()){
+      const query = playerSearch.trim().toLowerCase()
+      list = list.filter(p=> p.displayName.toLowerCase().includes(query))
+    }
+
+    return list.sort((a,b)=> a.name.localeCompare(b.name,'ja'))
+  }, [players, playersEx, universities, genderFilter, playerSearch])
 
   // Persist filter in localStorage (share same key with App to keep consistent)
   useEffect(()=>{
@@ -85,6 +123,17 @@ export default function Dashboard(props:{
     let wins=0, losses=0, draws=0, bouts=0, pf=0, pa=0
     const times:number[]=[]
 
+    // Helper to generate key based on granularity
+    const makeKey = (target: string, methods: string[]) => {
+      if(granularity === 'coarse') {
+        // Coarse: target only (面, 小手, 胴, 突き)
+        return target || ''
+      } else {
+        // Detailed: target:methods (飛び込み面, すり上げ小手, etc.)
+        return buildTechniqueKey(target, methods)
+      }
+    }
+
     for(const m of filtered){
       for(const b of (m.bouts?.items ?? [])){
         const isLeft = b.ourPlayerId===playerId
@@ -102,12 +151,12 @@ export default function Dashboard(props:{
           if(p.scorerPlayerId===playerId){
             pf++; opp.pf++; if(typeof p.tSec==='number') times.push(p.tSec)
             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
-            const key = buildTechniqueKey(p.target||'', p.methods||[])
+            const key = makeKey(p.target||'', p.methods||[])
             combinedFor[key] = (combinedFor[key]||0)+1
           } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
             pa++; opp.pa++
             if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
-            else { const key = buildTechniqueKey(p.target||'', p.methods||[]); combinedAgainst[key] = (combinedAgainst[key]||0)+1 }
+            else { const key = makeKey(p.target||'', p.methods||[]); combinedAgainst[key] = (combinedAgainst[key]||0)+1 }
           }
         }
       }
@@ -122,12 +171,24 @@ export default function Dashboard(props:{
     const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst, vsTop }
-  }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter, homeUniversityId])
+  }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter, homeUniversityId, granularity])
 
   function labelTarget(code:string){ return labelJa.target[code] ?? code }
   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
   function buildTechniqueKey(target?:string, methods?:string[]){ const mm = (methods||[]).slice().sort(); return `${target||''}:${mm.join('+')}` }
-  function labelTechniqueCombined(key:string){ if(key==='HANSOKU') return t('winType.HANSOKU'); const [target, mstr] = key.split(':'); const ml = (mstr? mstr.split('+') : []).map(labelMethod); const base = ml.join(''); return `${base}${labelTarget(target)}` }
+  function labelTechniqueCombined(key:string){
+    if(key==='HANSOKU') return t('winType.HANSOKU')
+    if(granularity === 'coarse') {
+      // Coarse: show target only (面, 小手, 胴, 突き)
+      return labelTarget(key)
+    } else {
+      // Detailed: show methods + target (飛び込み面, すり上げ小手, etc.)
+      const [target, mstr] = key.split(':')
+      const ml = (mstr? mstr.split('+') : []).map(labelMethod)
+      const base = ml.join('')
+      return `${base}${labelTarget(target)}`
+    }
+  }
 
   function PieChart({items, size=160}:{ items: [string, number][], size?:number }){
     const total = items.reduce((s, [,v])=> s+v, 0)
@@ -163,9 +224,16 @@ export default function Dashboard(props:{
       <Heading level={4}>{t('dashboard.title')}</Heading>
       <View marginTop="0.5rem">
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
-          <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="18rem">
+          <TextField
+            label={t('dashboard.searchPlayer')}
+            placeholder={t('dashboard.searchPlayerPlaceholder')}
+            value={playerSearch}
+            onChange={e=> setPlayerSearch(e.target.value)}
+            width="18rem"
+          />
+          <SelectField label={t('dashboard.selectPlayer')} value={playerId} onChange={e=> setPlayerId(e.target.value)} size="small" width="20rem">
             <option value="">--</option>
-            {playerList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
+            {playerList.map(p => (<option key={p.id} value={p.id}>{p.displayName}</option>))}
           </SelectField>
           <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
           <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
@@ -173,18 +241,25 @@ export default function Dashboard(props:{
             <option value="all">{t('filters.all')}</option>
             <option value="official">{t('filters.official')}</option>
             <option value="practice">{t('filters.practice')}</option>
-            <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
+            <option value="intra">{t('filters.intra')}</option>
           </SelectField>
-          <SelectField label={t('filters.gender') || 'Gender'} value={genderFilter} onChange={e=> setGenderFilter(e.target.value as any)} size="small" width="10rem">
+          <SelectField label={t('filters.gender')} value={genderFilter} onChange={e=> setGenderFilter(e.target.value as any)} size="small" width="10rem">
             <option value="all">{t('filters.all')}</option>
-            <option value="MALE">{t('gender.MALE') || '男子'}</option>
-            <option value="FEMALE">{t('gender.FEMALE') || '女子'}</option>
+            <option value="MALE">{t('gender.MALE')}</option>
+            <option value="FEMALE">{t('gender.FEMALE')}</option>
           </SelectField>
           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
           <SelectField label={t('dashboard.topN')} value={String(topN)} onChange={e=> setTopN(Number(e.target.value))} size="small" width="10rem">
             {[5,10,15].map(n=> (<option key={n} value={n}>{n}</option>))}
           </SelectField>
-          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all'); setGenderFilter('all') }}>{t('dashboard.clear')}</Button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600 }}>{t('dashboard.granularity')}</label>
+            <RadioGroupField legend="" name="granularity" value={granularity} onChange={e=> setGranularity(e.target.value as any)} orientation="horizontal">
+              <Radio value="coarse">{t('dashboard.granularityCoarse')}</Radio>
+              <Radio value="detailed">{t('dashboard.granularityDetailed')}</Radio>
+            </RadioGroupField>
+          </div>
+          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all'); setGenderFilter('all'); setPlayerSearch('') }}>{t('dashboard.clear')}</Button>
         </Flex>
       </View>
 
@@ -196,7 +271,7 @@ export default function Dashboard(props:{
         <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.stats')}</Heading>
-            <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : (officialFilter==='practice' ? t('filters.practice') : (t('filters.intra')||'Intra-squad'))}</b></div>
+            <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : (officialFilter==='practice' ? t('filters.practice') : t('filters.intra'))}</b></div>
             <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>
             <div>{t('dashboard.wins')}: <b>{stat.wins}</b> / {t('dashboard.losses')}: <b>{stat.losses}</b> / {t('dashboard.draws')}: <b>{stat.draws}</b></div>
             <div>{t('dashboard.winRate')}: <b>{(stat.winRate*100).toFixed(1)}%</b></div>
@@ -208,12 +283,12 @@ export default function Dashboard(props:{
 
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.pieFor')}</Heading>
-            <PieChart items={stat.topCombinedFor as any} />
+            <PieChart items={stat.topCombinedFor.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
           </View>
 
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
-            <PieChart items={stat.topCombinedAgainst as any} />
+            <PieChart items={stat.topCombinedAgainst.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
           </View>
 
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
