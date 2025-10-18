@@ -145,11 +145,27 @@ export default function NewEntryMode(props: {
   const [delModal, setDelModal] = useState<{ open:boolean; kind:'bout'|'match'; targetId: string; bout?: Bout|null }|null>(null)
 
   async function deleteBoutDeep(b: Bout){
-    const token = await getToken(); if(!token) return
-    for(const p of (b.points?.items ?? [])){
-      await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deletePointMutation, variables:{ input:{ id: p.id } } }) }).then(r=> r.json()).then(j=> { if(j.errors) throw new Error(JSON.stringify(j.errors)) })
+    const token = await getToken()
+    if(!token) throw new Error('No token')
+
+    console.log('[Delete] Starting deletion of bout:', b.id, 'with points:', b.points?.items?.length ?? 0)
+
+    // Delete all points first
+    const points = b.points?.items ?? []
+    for(const p of points){
+      console.log('[Delete] Deleting point:', p.id)
+      const r = await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deletePointMutation, variables:{ input:{ id: p.id } } }) })
+      const j = await r.json()
+      if(j.errors) throw new Error(`Failed to delete point ${p.id}: ${JSON.stringify(j.errors)}`)
     }
-    await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deleteBoutMutation, variables:{ input:{ id: b.id } } }) }).then(r=> r.json()).then(j=> { if(j.errors) throw new Error(JSON.stringify(j.errors)) })
+
+    // Delete the bout itself
+    console.log('[Delete] Deleting bout:', b.id)
+    const r = await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deleteBoutMutation, variables:{ input:{ id: b.id } } }) })
+    const j = await r.json()
+    if(j.errors) throw new Error(`Failed to delete bout ${b.id}: ${JSON.stringify(j.errors)}`)
+
+    console.log('[Delete] Successfully deleted bout:', b.id)
   }
 
   async function deleteMatchDeep(matchId:string){
@@ -572,12 +588,28 @@ export default function NewEntryMode(props: {
       onConfirm={async()=>{
         if(!delModal) return
         try{
-          if(delModal.kind==='bout' && delModal.bout){ await deleteBoutDeep(delModal.bout) }
-          if(delModal.kind==='match'){ await deleteMatchDeep(delModal.targetId) }
-          if(delModal.kind==='bout' && delModal.bout){ setBoutsLocal(prev=> prev.filter(x=> x.id!==delModal.bout!.id)); setRows(prev=> { const cp={...prev}; delete cp[delModal.bout!.id]; return cp }) }
-          if(delModal.kind==='match'){ setBoutsLocal([]); setRows({}) }
-          setDelModal(null); await onSaved()
-        }catch(e){ alert(String(e)) }
+          console.log('[Delete] Confirming deletion:', delModal.kind, delModal.targetId)
+
+          // Perform deletion on server
+          if(delModal.kind==='bout' && delModal.bout){
+            await deleteBoutDeep(delModal.bout)
+          }
+          if(delModal.kind==='match'){
+            await deleteMatchDeep(delModal.targetId)
+          }
+
+          // Close modal
+          setDelModal(null)
+
+          // Reload data from server to ensure consistency
+          await onSaved()
+
+          console.log('[Delete] Deletion completed and data reloaded')
+        }catch(e){
+          console.error('[Delete] Error:', e)
+          alert(String(e))
+          setDelModal(null)
+        }
       }}
     />
     <NewPlayerModal
