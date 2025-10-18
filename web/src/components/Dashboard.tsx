@@ -600,10 +600,20 @@ export default function Dashboard(props:{
                 }
               }catch{}
 
+              const playerInfo = playersEx[playerId]
+              const universityId = playerInfo?.universityId || null
+              const universityName = universityId ? (universities[universityId] || null) : null
               const payload = {
                 version: 'v1', mode: 'personal', locale: (navigator?.language||'ja'),
                 filters: { from, to, type: officialFilter, tournamentQuery: tournamentFilter||'' },
-                subject: { playerId, displayName: players[playerId]||playerId },
+                subject: {
+                  playerId,
+                  displayName: players[playerId]||playerId,
+                  universityId,
+                  universityName,
+                  gender: playerInfo?.gender || null,
+                  grade: playerInfo?.grade || null
+                },
                 sampleSizes: { matches: (matches||[]).length, bouts: stat.bouts },
                 stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, ppg: stat.ppg, diff: stat.diff, winRate: stat.winRate, avgTimeToScoreSec: stat.avgTime, fastestSec: stat.fastest, slowestSec: stat.slowest },
                 topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
