@@ -286,7 +286,7 @@ export default function Dashboard(props:{
           </SelectField>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label style={{ fontSize: 12, fontWeight: 600 }}>{t('dashboard.granularity')}</label>
-            <RadioGroupField legend="" name="granularity" value={granularity} onChange={e=> setGranularity(e.target.value as any)} orientation="horizontal">
+            <RadioGroupField legend="" name="granularity" value={granularity} onChange={e=> setGranularity(e.target.value as any)} direction="row">
               <Radio value="coarse">{t('dashboard.granularityCoarse')}</Radio>
               <Radio value="detailed">{t('dashboard.granularityDetailed')}</Radio>
             </RadioGroupField>

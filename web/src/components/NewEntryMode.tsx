@@ -1,9 +1,24 @@
 ﻿import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge } from '@aws-amplify/ui-react'
-import { methodAllowedForTargetJaLabel } from '../lib/tech'
+import IpponCell, { type PointInput } from './IpponCell'
+import NewPlayerModal from './modals/NewPlayerModal'
+import BoutAnalysisModal from './modals/BoutAnalysisModal'
+import DeleteConfirmModal from './modals/DeleteConfirmModal'
+import { fallbackTargets, fallbackMethods, type Master } from '../constants/fallbackMasters'
+import {
+  createPointMutation,
+  createMatchMutation,
+  createBoutMutation,
+  createPlayerMutation,
+  updateBoutMutation,
+  updateMatchMutation,
+  deletePointMutation,
+  deleteBoutMutation,
+  deleteMatchMutation,
+  createBoutAnalysisMutation,
+} from '../graphql/matchMutations'
 
-type Master = { code: string; nameJa?: string; nameEn?: string }
 type Bout = {
   id: string;
   ourPlayerId: string;
@@ -11,106 +26,14 @@ type Bout = {
   ourPosition?: string;
   ourStance?: string;
   opponentStance?: string;
+  winType?: string | null;
+  winnerPlayerId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
   points?: { items: { id: string; tSec: number; target?: string|null; methods?: string[]|null; scorerPlayerId?: string|null; judgement?: string|null }[] }
 }
-type PointInput = { tSec: number | ''; target: string; methods: string[] }
 type University = { id: string; name: string; shortName?: string|null }
 type PlayerEx = { id: string; name: string; universityId?: string|null; grade?: number|null }
-
-function IpponCell(props: {
-  value: PointInput | null
-  onChange: (next: PointInput | null) => void
-  targets: Master[]
-  methods: Master[]
-  onFocus?: () => void
-}){
-  const { t, i18n } = useTranslation()
-  const { value, onChange, targets, methods, onFocus } = props
-  const v = value ?? { tSec: 0, target: '', methods: [] }
-  const valid = (v.methods.length>0) && !!v.target && ((typeof v.tSec === 'number' && v.tSec >= 0) || v.tSec==='')
-  const [open, setOpen] = useState(false)
-
-  function parseTime(input: string): number | '' {
-    const s = input.trim()
-    if(s === '') return ''
-    const mmss = s.match(/^([0-9]{1,2})[:'m]\s*([0-5]?[0-9])$/)
-    if(mmss){ return Number(mmss[1])*60 + Number(mmss[2]) }
-    const n = Number(s); return Number.isFinite(n) && n>=0 ? n : ''
-  }
-
-  function targetLabelJa(code:string){ const m = targets.find(t=> t.code===code); return (m?.nameJa ?? m?.nameEn ?? '') }
-  function methodAllowedForTarget2(mcode:string, tcode:string){
-    if(!tcode) return true
-    const tl = targetLabelJa(tcode)
-    // Prefer Japanese label; fall back to common target codes
-    if(tl) return methodAllowedForTargetJaLabel(mcode, tl)
-    const code = (tcode||'').toUpperCase()
-    if(mcode==='GYAKU') return code.includes('DO')
-    if(mcode==='HIDARI') return code.includes('KOTE')
-    if(mcode==='AIKOTE') return code.includes('MEN')
-    return true
-  }
-  function methodAllowedForTarget(mcode:string, tcode:string){
-    if(!tcode) return true
-    const tl = targetLabelJa(tcode)
-    if(mcode==='GYAKU') return tl.includes('胴')
-    if(mcode==='HIDARI') return tl.includes('小手')
-    if(mcode==='AIKOTE') return tl.includes('面')
-    return true
-  }
-
-  return (
-    <div style={{ position:'relative', display: 'grid', gridTemplateColumns: 'minmax(32px,auto) 1fr', gridAutoRows:'minmax(20px,auto)', gap: 4, border: valid ? '1px solid transparent' : '1px solid #e66', borderRadius:6, padding:'2px 4px' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:4, minHeight: 24 }}>
-        <Button size="small" variation="link" onClick={()=> { onFocus?.(); setOpen(o=> !o) }} title={open ? t('ipponCell.closeMethods') : t('ipponCell.chooseMethods')} style={{ minWidth:28, padding:'2px 4px' }}>
-          {open ? '-' : '+'}
-        </Button>
-        {!open && (
-          <div style={{ display:'flex', gap:2, overflow:'hidden', whiteSpace:'nowrap' }}>
-            {v.methods.slice(0,2).map(code=> {
-              const found = methods.find(mm=> mm.code===code)
-              const label = found ? (i18n.language.startsWith('ja') ? (found.nameJa ?? found.nameEn ?? found.code) : (found.nameEn ?? found.code)) : code
-              return (<Badge key={code} variation="info" style={{ padding:'0 4px' }}>{label}</Badge>)
-            })}
-            {v.methods.length>2 && (<Badge variation="info" style={{ padding:'0 4px' }}>+{v.methods.length-2}</Badge>)}
-          </div>
-        )}
-      </div>
-      {open && (
-        <div style={{ position:'absolute', top:'100%', left:0, zIndex:20, marginTop:4, background:'#fff', display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:4, maxHeight:140, width:260, overflowY:'auto', border:'1px solid #ddd', borderRadius:6, padding:6, boxShadow:'0 2px 8px rgba(0,0,0,0.15)' }}>
-          {methods.map(m=> {
-            const checked = v.methods.includes(m.code)
-            const allowed = methodAllowedForTarget2(m.code, v.target)
-            return (
-              <label key={m.code} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, opacity: allowed?1:0.4 }}>
-                <input type="checkbox" disabled={!allowed} checked={checked && allowed} onChange={(e)=>{
-                  onFocus?.();
-                  if(e.target.checked) {
-                    onChange({ ...v, methods: [...v.methods, m.code] })
-                    setTimeout(() => setOpen(false), 200)
-                  } else {
-                    onChange({ ...v, methods: v.methods.filter(x=> x!==m.code) })
-                  }
-                }} />
-                <span>{i18n.language.startsWith('ja') ? (m.nameJa ?? m.nameEn ?? m.code) : (m.nameEn ?? m.code)}</span>
-              </label>
-            )
-          })}
-        </div>
-      )}
-      <SelectField label="" labelHidden placeholder={t('ipponCell.targetPlaceholder')} value={v.target} onChange={(e)=> { onFocus?.(); const nextTarget=e.target.value; const filtered = (v.methods||[]).filter(m=> methodAllowedForTarget2(m, nextTarget)); onChange({ ...v, target: nextTarget, methods: filtered }) }} size="small">
-        <option value=""></option>
-        {targets.map(tgt=> (
-          <option key={tgt.code} value={tgt.code}>{i18n.language.startsWith('ja') ? (tgt.nameJa ?? tgt.nameEn ?? tgt.code) : (tgt.nameEn ?? tgt.code)}</option>
-        ))}
-      </SelectField>
-      <div style={{ gridColumn:'1 / 2', display:'flex', alignItems:'center', gap:4 }}>
-        <TextField label="" labelHidden placeholder={t('ipponCell.secondsPlaceholder')} value={v.tSec === '' ? '' : String(v.tSec)} onChange={(e)=> { onFocus?.(); onChange({ ...v, tSec: parseTime(e.target.value) }) }} width="40px" style={{ padding:'2px 4px' }} />
-        <span style={{ fontSize:10, color:'#666' }}>s</span>
-      </div>
-    </div>
-  )
-}
 
 export default function NewEntryMode(props: {
   matchId: string
@@ -143,37 +66,15 @@ export default function NewEntryMode(props: {
   const [playersEx, setPlayersEx] = useState<PlayerEx[]>([])
   const [ourUniversityId, setOurUniversityId] = useState<string>('')
   const [opponentUniversityId, setOpponentUniversityId] = useState<string>('')
-  const [newPlayerModal, setNewPlayerModal] = useState<{ open: boolean; side: 'left'|'right'; name: string; universityId: string; gender: string; stance: string }>({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })
+  const [newPlayerModal, setNewPlayerModal] = useState<{ open: boolean; side: 'left'|'right'; name: string; universityId: string; gender: string; stance: string; loading: boolean; error: string }>({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '', loading: false, error: '' })
   const [isOfficial, setIsOfficial] = useState<boolean>(true)
   const [videoUrl, setVideoUrl] = useState<string>('')
   const [videoPlaylist, setVideoPlaylist] = useState<string>('')
   const [refError, setRefError] = useState<string|undefined>(undefined)
   const [dense, setDense] = useState<boolean>(true)
-  // Fallback masters when API returns empty in prod
-  const fallbackTargets2: Master[] = [
-    { code: 'MEN', nameJa: '面', nameEn: 'Men' },
-    { code: 'KOTE', nameJa: '小手', nameEn: 'Kote' },
-    { code: 'DO', nameJa: '胴', nameEn: 'Do' },
-    { code: 'TSUKI', nameJa: '突き', nameEn: 'Tsuki' },
-  ]
-  const fallbackMethods2: Master[] = [
-    { code:'SURIAGE', nameJa:'すり上げ', nameEn:'Suriage' },
-    { code:'KAESHI', nameJa:'返し', nameEn:'Kaeshi' },
-    { code:'NUKI', nameJa:'抜き', nameEn:'Nuki' },
-    { code:'DEBANA', nameJa:'出ばな', nameEn:'Debana' },
-    { code:'HIKI', nameJa:'引き', nameEn:'Hiki' },
-    { code:'HARAI', nameJa:'払い', nameEn:'Harai' },
-    { code:'TOBIKOMI', nameJa:'飛び込み', nameEn:'Tobikomi' },
-    { code:'GYAKU', nameJa:'逆', nameEn:'Gyaku' },
-    { code:'HIDARI', nameJa:'左', nameEn:'Left' },
-    { code:'AIKOTE', nameJa:'相小手', nameEn:'Aikote' },
-  ]
-  const safeTargets2 = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets2
-  const safeMethods2 = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods2
+  const safeTargets = (masters.targets && masters.targets.length>0) ? masters.targets : fallbackTargets
+  const safeMethods = (masters.methods && masters.methods.length>0) ? masters.methods : fallbackMethods
   const [focusBoutId, setFocusBoutId] = useState<string>('')
-  // Back-compat aliases for components using safeTargets/safeMethods
-  const safeTargets = safeTargets2
-  const safeMethods = safeMethods2
   const [allowEncho, setAllowEncho] = useState<boolean>(true)
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
@@ -241,25 +142,30 @@ export default function NewEntryMode(props: {
 
   function techniqueKey(target: string, methods: string[]) { return `${target}:${[...methods].sort().join('+')}` }
 
-  const createPointMutation = `mutation CreatePoint($input: CreatePointInput!) { createPoint(input:$input) { id } }`
-  const createMatchMutation = `mutation CreateMatch($input: CreateMatchInput!) { createMatch(input:$input){ id heldOn tournament isOfficial ourUniversityId opponentUniversityId videoUrl videoPlaylist } }`
-  const createBoutMutation = `mutation CreateBout($input: CreateBoutInput!) { createBout(input:$input){ id ourPlayerId opponentPlayerId } }`
-  const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name universityId gender stance } }`
-  const updateBoutMutation = `mutation UpdateBout($input: UpdateBoutInput!) { updateBout(input:$input){ id winType winnerPlayerId } }`
-  const updateMatchMutation = `mutation UpdateMatch($input: UpdateMatchInput!) { updateMatch(input:$input){ id videoUrl videoPlaylist } }`
-  const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input){ id } }`
-  const deleteBoutMutation = `mutation DeleteBout($input: DeleteBoutInput!) { deleteBout(input:$input){ id } }`
-  const deleteMatchMutation = `mutation DeleteMatch($input: DeleteMatchInput!) { deleteMatch(input:$input){ id } }`
-  const createBoutAnalysisMutation = `mutation CreateBoutAnalysis($input: CreateBoutAnalysisInput!) { createBoutAnalysis(input:$input){ id boutId category content importance tags recordedAt } }`
-
   const [delModal, setDelModal] = useState<{ open:boolean; kind:'bout'|'match'; targetId: string; bout?: Bout|null }|null>(null)
 
   async function deleteBoutDeep(b: Bout){
-    const token = await getToken(); if(!token) return
-    for(const p of (b.points?.items ?? [])){
-      await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deletePointMutation, variables:{ input:{ id: p.id } } }) }).then(r=> r.json()).then(j=> { if(j.errors) throw new Error(JSON.stringify(j.errors)) })
+    const token = await getToken()
+    if(!token) throw new Error('No token')
+
+    console.log('[Delete] Starting deletion of bout:', b.id, 'with points:', b.points?.items?.length ?? 0)
+
+    // Delete all points first
+    const points = b.points?.items ?? []
+    for(const p of points){
+      console.log('[Delete] Deleting point:', p.id)
+      const r = await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deletePointMutation, variables:{ input:{ id: p.id } } }) })
+      const j = await r.json()
+      if(j.errors) throw new Error(`Failed to delete point ${p.id}: ${JSON.stringify(j.errors)}`)
     }
-    await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deleteBoutMutation, variables:{ input:{ id: b.id } } }) }).then(r=> r.json()).then(j=> { if(j.errors) throw new Error(JSON.stringify(j.errors)) })
+
+    // Delete the bout itself
+    console.log('[Delete] Deleting bout:', b.id)
+    const r = await fetch(apiUrl,{ method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: deleteBoutMutation, variables:{ input:{ id: b.id } } }) })
+    const j = await r.json()
+    if(j.errors) throw new Error(`Failed to delete bout ${b.id}: ${JSON.stringify(j.errors)}`)
+
+    console.log('[Delete] Successfully deleted bout:', b.id)
   }
 
   async function deleteMatchDeep(matchId:string){
@@ -338,6 +244,20 @@ export default function NewEntryMode(props: {
 
   async function saveAll(){ for(const b of bouts){ const s = rows[b.id]; if(!s) continue; await saveBout(b,s) } await onSaved() }
 
+  async function saveMatchInfo(){
+    if(!matchId){ alert(t('alerts.enterDate')); return }
+    setOpMsg(undefined); setSavingId('match')
+    try{
+      const token = await getToken(); if(!token){ setOpMsg(t('errors.notSignedIn')); return }
+      const input:any = { id: matchId, videoUrl: videoUrl||null, videoPlaylist: videoPlaylist||null }
+      const r = await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:updateMatchMutation, variables:{ input } })});
+      const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+      setOpMsg(t('notices.saved'))
+      await onSaved()
+    }catch(e:any){ setOpMsg(String(e?.message ?? e)) }
+    finally{ setSavingId('') }
+  }
+
   async function addNewBout(){
     if(!newLeft || !newRight){ alert(t('alerts.selectPlayers')); return }
     let useMatchId = matchId
@@ -362,20 +282,36 @@ export default function NewEntryMode(props: {
 
   async function registerNewPlayer(){
     const { name, universityId, gender, stance, side } = newPlayerModal
-    if(!name.trim()){ alert(t('errors.universityRequired')); return }
-    if(!universityId){ alert(t('errors.universityRequired')); return }
-    const token = await getToken(); if(!token) return
-    const input:any = { name: name.trim(), universityId, gender: gender||null, stance: stance||null, active: true }
-    const r = await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createPlayerMutation, variables:{ input } })});
-    const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
-    const newPlayerId = j.data.createPlayer.id
-    // Set the newly created player
-    if(side === 'left') setNewLeft(newPlayerId)
-    else setNewRight(newPlayerId)
-    // Reload ref data to include new player
-    await loadRefData()
-    // Close modal
-    setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })
+    if(!name.trim()){ setNewPlayerModal(m=> ({...m, error: t('errors.universityRequired')})); return }
+    if(!universityId){ setNewPlayerModal(m=> ({...m, error: t('errors.universityRequired')})); return }
+
+    setNewPlayerModal(m=> ({...m, loading: true, error: ''}))
+    try{
+      const token = await getToken();
+      if(!token){
+        setNewPlayerModal(m=> ({...m, loading: false, error: t('errors.notSignedIn')}));
+        return
+      }
+
+      const input:any = { name: name.trim(), universityId, gender: gender||null, preferredStance: stance||null, isActive: true }
+      const r = await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createPlayerMutation, variables:{ input } })});
+      const j:any = await r.json();
+      if(j.errors) throw new Error(JSON.stringify(j.errors));
+
+      const newPlayerId = j.data.createPlayer.id
+
+      // Set the newly created player
+      if(side === 'left') setNewLeft(newPlayerId)
+      else setNewRight(newPlayerId)
+
+      // Reload ref data to include new player
+      await loadRefData()
+
+      // Close modal on success
+      setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '', loading: false, error: '' })
+    }catch(e:any){
+      setNewPlayerModal(m=> ({...m, loading: false, error: String(e?.message ?? e)}))
+    }
   }
 
   async function saveBoutAnalysis(){
@@ -407,15 +343,22 @@ export default function NewEntryMode(props: {
   }
   function getPlayerName(playerId: string){ return playersEx.find(p=> p.id===playerId)?.name ?? players[playerId] ?? playerId }
 
-  // Sort bouts by ID to ensure consistent display order (newly added bouts appear at the bottom)
+  // Sort bouts by createdAt to maintain input order (newly added bouts appear at the bottom)
   const sortedBouts = useMemo(() => {
-    return [...boutsLocal].sort((a, b) => a.id.localeCompare(b.id))
+    return [...boutsLocal].sort((a, b) => {
+      // If createdAt exists, use it for chronological order
+      if (a.createdAt && b.createdAt) {
+        return a.createdAt.localeCompare(b.createdAt)
+      }
+      // Fallback to ID if createdAt is missing
+      return a.id.localeCompare(b.id)
+    })
   }, [boutsLocal])
 
   return (
     <>
     <View>
-      <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'flex-end'}}>
+      <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end'}}>
         <SelectField label={t('labels.match')} value={matchId} onChange={e=> setMatchId(e.target.value)} size="small">
           <option value="">{t('placeholders.select')}</option>
           {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
@@ -435,13 +378,14 @@ export default function NewEntryMode(props: {
         </SelectField>
         <TextField label="Video URL" placeholder="https://..." value={videoUrl} onChange={e=> setVideoUrl(e.target.value)} width={dense?"16rem":"20rem"} />
         <TextField label="Playlist URL" placeholder="https://..." value={videoPlaylist} onChange={e=> setVideoPlaylist(e.target.value)} width={dense?"16rem":"20rem"} />
+        <Button size="small" onClick={saveMatchInfo} isDisabled={!matchId} isLoading={savingId==='match'}>Save Video URLs</Button>
         <Button size="small" variation="primary" onClick={saveAll} isDisabled={bouts.length===0}>{t('actions.saveAll')}</Button>
         {matchId && (
           <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'match', targetId: matchId, bout: null })}>{t('actions.deleteMatch')}</Button>
         )}
         <Button size="small" variation="link" onClick={()=> setDense(d=> !d)}>{dense? t('actions.switchStandard'):t('actions.switchDense')}</Button>
       </View>
-      <View marginBottom="0.25rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap', alignItems:'center'}}>
+      <View marginBottom="0.25rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'center'}}>
         <TextField label={t('labels.searchPlayer')} placeholder={t('placeholders.nameFilter')} value={playerFilter} onChange={e=> setPlayerFilter(e.target.value)} width={dense?"12rem":"16rem"} />
         <Button size="small" onClick={loadRefData}>{t('actions.reloadRefs')}</Button>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -503,7 +447,7 @@ export default function NewEntryMode(props: {
                   ) : null
                 })()}
                 {leftSearch.trim() && playersEx.filter(p=> p.name.toLowerCase().includes(leftSearch.trim().toLowerCase())).length === 0 && (
-                  <Button size="small" variation="link" onClick={()=> setNewPlayerModal({ open:true, side:'left', name: leftSearch.trim(), universityId:'', gender:'', stance:'' })} style={{ fontSize:11, padding:'2px 4px' }}>{t('actions.newPlayer')}</Button>
+                  <Button size="small" variation="link" onClick={()=> setNewPlayerModal({ open:true, side:'left', name: leftSearch.trim(), universityId:'', gender:'', stance:'', loading: false, error: '' })} style={{ fontSize:11, padding:'2px 4px' }}>{t('actions.newPlayer')}</Button>
                 )}
                 <select value={newLeft} onChange={e=> { setNewLeft(e.target.value); setLeftSearch('') }} style={{ width:'100%', fontSize:12 }}>
                   <option value="">{t('placeholders.selectLeft')}</option>
@@ -543,7 +487,7 @@ export default function NewEntryMode(props: {
                   ) : null
                 })()}
                 {rightSearch.trim() && playersEx.filter(p=> p.name.toLowerCase().includes(rightSearch.trim().toLowerCase())).length === 0 && (
-                  <Button size="small" variation="link" onClick={()=> setNewPlayerModal({ open:true, side:'right', name: rightSearch.trim(), universityId:'', gender:'', stance:'' })} style={{ fontSize:11, padding:'2px 4px' }}>{t('actions.newPlayer')}</Button>
+                  <Button size="small" variation="link" onClick={()=> setNewPlayerModal({ open:true, side:'right', name: rightSearch.trim(), universityId:'', gender:'', stance:'', loading: false, error: '' })} style={{ fontSize:11, padding:'2px 4px' }}>{t('actions.newPlayer')}</Button>
                 )}
                 <select value={newRight} onChange={e=> { setNewRight(e.target.value); setRightSearch('') }} style={{ width:'100%', fontSize:12 }}>
                   <option value="">{t('placeholders.selectRight')}</option>
@@ -607,7 +551,7 @@ export default function NewEntryMode(props: {
                   <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   <Button size="small" onClick={()=> saveRow(b)} isDisabled={!rowValid || savingId===b.id} isLoading={savingId===b.id}>{t('actions.save')}</Button>
                   <Button size="small" variation="link" onClick={()=> setAnalysisModal({ open:true, boutId: b.id, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })}>{t('analysis.addAnalysis')}</Button>
-                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, bout: b })}>{t('actions.delete')}</Button>
+                  <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, kind:'bout', targetId: b.id, bout: b })}>{t('actions.delete')}</Button>
                     {!autoResult && (
                       <>
                         <select value={(resultEdit[b.id]?.winType)|| (b.winType ?? '')} onChange={(e)=> setResultEdit(x=> ({...x, [b.id]: { winType: e.target.value, winner: (resultEdit[b.id]?.winner ?? (b.winnerPlayerId? (b.winnerPlayerId===b.ourPlayerId?'our':'opponent') : '') ) as any }}))} style={{ fontSize:12 }}>
@@ -637,117 +581,61 @@ export default function NewEntryMode(props: {
         </TableBody>
       </Table>
     </View>
-    {delModal?.open && (
-      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setDelModal(null)}>
-        <div style={{ background:'#fff', minWidth:320, maxWidth:520, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
-          <h4 style={{ marginTop:0 }}>{delModal.kind==='bout' ? t('confirm.deleteBoutTitle') : t('confirm.deleteMatchTitle')}</h4>
-          <div style={{ color:'#444', marginBottom:12 }}>
-            {delModal.kind==='bout' && (<>
-              <div>{t('confirm.deleteBoutBody')}</div>
-              <div style={{ fontSize:12, color:'#666' }}>{t('confirm.deleteBoutNote')}</div>
-            </>)}
-            {delModal.kind==='match' && (<>
-              <div>{t('confirm.deleteMatchBody')}</div>
-              <div style={{ fontSize:12, color:'#666' }}>{t('confirm.deleteMatchNote')}</div>
-            </>)}
-          </div>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-            <Button onClick={()=> setDelModal(null)} variation="link">{t('action.cancel')}</Button>
-            <Button variation="warning" onClick={async()=>{
-              try{
-                if(delModal.kind==='bout' && delModal.bout){ await deleteBoutDeep(delModal.bout) }
-                if(delModal.kind==='match'){ await deleteMatchDeep(delModal.targetId) }
-                if(delModal.kind==='bout' && delModal.bout){ setBoutsLocal(prev=> prev.filter(x=> x.id!==delModal.bout!.id)); setRows(prev=> { const cp={...prev}; delete cp[delModal.bout!.id]; return cp }) }
-                if(delModal.kind==='match'){ setBoutsLocal([]); setRows({}) }
-                setDelModal(null); await onSaved()
-              }catch(e){ alert(String(e)) }
-            }}>{t('action.delete')}</Button>
-          </div>
-        </div>
-      </div>
-    )}
-    {newPlayerModal.open && (
-      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setNewPlayerModal({ ...newPlayerModal, open: false })}>
-        <div style={{ background:'#fff', minWidth:360, maxWidth:520, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
-          <h4 style={{ marginTop:0 }}>{t('actions.newPlayer')}</h4>
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.playerName')}</label>
-              <input type="text" value={newPlayerModal.name} onChange={e=> setNewPlayerModal({ ...newPlayerModal, name: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }} />
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.university')}</label>
-              <select value={newPlayerModal.universityId} onChange={e=> setNewPlayerModal({ ...newPlayerModal, universityId: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
-                <option value="">{t('placeholders.select')}</option>
-                {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.gender')}</label>
-              <select value={newPlayerModal.gender} onChange={e=> setNewPlayerModal({ ...newPlayerModal, gender: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
-                <option value="">{t('placeholders.select')}</option>
-                <option value="MALE">{t('gender.MALE')}</option>
-                <option value="FEMALE">{t('gender.FEMALE')}</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('labels.stance')}</label>
-              <select value={newPlayerModal.stance} onChange={e=> setNewPlayerModal({ ...newPlayerModal, stance: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
-                <option value="">{t('placeholders.select')}</option>
-                <option value="JODAN">{t('stance.JODAN')}</option>
-                <option value="CHUDAN">{t('stance.CHUDAN')}</option>
-                <option value="NITOU_SHO">{t('stance.NITOU_SHO')}</option>
-                <option value="NITOU_GYAKU">{t('stance.NITOU_GYAKU')}</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
-            <Button onClick={()=> setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })} variation="link">{t('action.cancel')}</Button>
-            <Button variation="primary" onClick={registerNewPlayer} isDisabled={!newPlayerModal.name.trim() || !newPlayerModal.universityId}>{t('actions.register')}</Button>
-          </div>
-        </div>
-      </div>
-    )}
-    {analysisModal.open && (
-      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setAnalysisModal({ ...analysisModal, open: false })}>
-        <div style={{ background:'#fff', minWidth:400, maxWidth:600, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
-          <h4 style={{ marginTop:0 }}>{t('analysis.boutAnalysis')}</h4>
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.category')}</label>
-              <select value={analysisModal.category} onChange={e=> setAnalysisModal({ ...analysisModal, category: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
-                <option value="STRENGTH">{t('analysis.categories.STRENGTH')}</option>
-                <option value="WEAKNESS">{t('analysis.categories.WEAKNESS')}</option>
-                <option value="TACTICAL">{t('analysis.categories.TACTICAL')}</option>
-                <option value="MENTAL">{t('analysis.categories.MENTAL')}</option>
-                <option value="TECHNICAL">{t('analysis.categories.TECHNICAL')}</option>
-                <option value="OTHER">{t('analysis.categories.OTHER')}</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.importance')}</label>
-              <select value={analysisModal.importance} onChange={e=> setAnalysisModal({ ...analysisModal, importance: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
-                <option value="HIGH">{t('analysis.importance_levels.HIGH')}</option>
-                <option value="MEDIUM">{t('analysis.importance_levels.MEDIUM')}</option>
-                <option value="LOW">{t('analysis.importance_levels.LOW')}</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.content')}</label>
-              <textarea value={analysisModal.content} onChange={e=> setAnalysisModal({ ...analysisModal, content: e.target.value })} style={{ width:'100%', padding:'8px', fontSize:14, border:'1px solid #ccc', borderRadius:4, minHeight:120, fontFamily:'inherit' }} placeholder={t('analysis.content')} />
-            </div>
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.tags')}</label>
-              <input type="text" value={analysisModal.tags} onChange={e=> setAnalysisModal({ ...analysisModal, tags: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }} placeholder="tag1, tag2, tag3" />
-            </div>
-          </div>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
-            <Button onClick={()=> setAnalysisModal({ open: false, boutId: '', category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })} variation="link">{t('action.cancel')}</Button>
-            <Button variation="primary" onClick={saveBoutAnalysis} isDisabled={!analysisModal.content.trim()}>{t('actions.save')}</Button>
-          </div>
-        </div>
-      </div>
-    )}
+    <DeleteConfirmModal
+      open={!!delModal?.open}
+      kind={(delModal?.kind === 'bout' ? 'bout' : 'match') as 'bout' | 'match'}
+      onClose={()=> setDelModal(null)}
+      onConfirm={async()=>{
+        if(!delModal) return
+        try{
+          console.log('[Delete] Confirming deletion:', delModal.kind, delModal.targetId)
+
+          // Perform deletion on server
+          if(delModal.kind==='bout' && delModal.bout){
+            await deleteBoutDeep(delModal.bout)
+          }
+          if(delModal.kind==='match'){
+            await deleteMatchDeep(delModal.targetId)
+          }
+
+          // Close modal
+          setDelModal(null)
+
+          // Reload data from server to ensure consistency
+          await onSaved()
+
+          console.log('[Delete] Deletion completed and data reloaded')
+        }catch(e){
+          console.error('[Delete] Error:', e)
+          alert(String(e))
+          setDelModal(null)
+        }
+      }}
+    />
+    <NewPlayerModal
+      open={newPlayerModal.open}
+      side={newPlayerModal.side}
+      name={newPlayerModal.name}
+      universityId={newPlayerModal.universityId}
+      gender={newPlayerModal.gender}
+      stance={newPlayerModal.stance}
+      loading={newPlayerModal.loading}
+      error={newPlayerModal.error}
+      universities={universities}
+      onClose={()=> setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '', loading: false, error: '' })}
+      onChange={(field, value)=> setNewPlayerModal({ ...newPlayerModal, [field]: value })}
+      onRegister={registerNewPlayer}
+    />
+    <BoutAnalysisModal
+      open={analysisModal.open}
+      category={analysisModal.category}
+      content={analysisModal.content}
+      importance={analysisModal.importance}
+      tags={analysisModal.tags}
+      onClose={()=> setAnalysisModal({ open: false, boutId: '', category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })}
+      onChange={(field, value)=> setAnalysisModal({ ...analysisModal, [field]: value })}
+      onSave={saveBoutAnalysis}
+    />
     </>
   )
 }

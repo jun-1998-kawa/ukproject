@@ -167,7 +167,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
     <>
     <View>
       <Heading level={5}>{t('admin.players.title')}</Heading>
-      <View marginBottom="0.5rem" display="flex" gap="0.5rem" style={{flexWrap:'wrap'}}>
+      <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap'}}>
         <TextField label={t('admin.players.search')} placeholder={t('placeholders.nameFilter')} value={filter} onChange={e=> setFilter(e.target.value)} width="16rem" />
         <TextField label={t('admin.players.newName')} value={newName} onChange={e=> setNewName(e.target.value)} width="16rem" />
         <TextField label={t('admin.players.kana')} value={newKana} onChange={e=> setNewKana(e.target.value)} width="12rem" />
@@ -224,38 +224,38 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
           {visible.map(p => (
             <TableRow key={p.id}>
               <TableCell>
-                <TextField size="small" labelHidden value={p.name} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, name:v}: x)) }} width="100%" />
+                <TextField size="small" label="Name" labelHidden value={p.name} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, name:v}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.nameKana ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, nameKana:v||null}: x)) }} width="100%" />
+                <TextField size="small" label="Kana" labelHidden value={p.nameKana ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, nameKana:v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={p.gender ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, gender:v||null}: x)) }} width="100%">
+                <SelectField size="small" label="Gender" labelHidden value={p.gender ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, gender:v||null}: x)) }} width="100%">
                   <option value="">-</option>
                   <option value="MALE">{t('gender.MALE') || '男子'}</option>
                   <option value="FEMALE">{t('gender.FEMALE') || '女子'}</option>
                 </SelectField>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.studentNo ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, studentNo:v||null}: x)) }} width="100%" />
+                <TextField size="small" label="StudentNo" labelHidden value={p.studentNo ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, studentNo:v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={p.universityId ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, universityId: v||null}: x)) }} width="100%">
+                <SelectField size="small" label="University" labelHidden value={p.universityId ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, universityId: v||null}: x)) }} width="100%">
                   <option value="">{t('placeholders.unselected')}</option>
                   {universities.map(u=> (<option key={u.id} value={u.id}>{u.name}</option>))}
                 </SelectField>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden type="number" value={String(p.enrollYear ?? '')} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, enrollYear: v? Number(v): null}: x)) }} width="100%" />
+                <TextField size="small" label="EnrollYear" labelHidden type="number" value={String(p.enrollYear ?? '')} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, enrollYear: v? Number(v): null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
                 <Badge variation="info">{calcGrade(p.enrollYear) ?? '-'}</Badge>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.dan ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, dan: v||null}: x)) }} width="100%" />
+                <TextField size="small" label="Dan" labelHidden value={p.dan ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, dan: v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={p.preferredStance ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, preferredStance: v||null}: x)) }} width="100%">
+                <SelectField size="small" label="Stance" labelHidden value={p.preferredStance ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, preferredStance: v||null}: x)) }} width="100%">
                   <option value="">{t('placeholders.unselected')}</option>
                   <option value="JODAN">{t('stance.JODAN')}</option>
                   <option value="CHUDAN">{t('stance.CHUDAN')}</option>
@@ -264,13 +264,13 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
                 </SelectField>
               </TableCell>
               <TableCell>
-                <SelectField size="small" labelHidden value={String(p.isActive ?? true)} onChange={e=> { const v=e.target.value==='true'; setPlayers(list=> list.map(x=> x.id===p.id? {...x, isActive: v}: x)) }} width="100%">
+                <SelectField size="small" label="Active" labelHidden value={String(p.isActive ?? true)} onChange={e=> { const v=e.target.value==='true'; setPlayers(list=> list.map(x=> x.id===p.id? {...x, isActive: v}: x)) }} width="100%">
                   <option value="true">{t('admin.players.activeTrue')}</option>
                   <option value="false">OB/OG</option>
                 </SelectField>
               </TableCell>
               <TableCell>
-                <TextField size="small" labelHidden value={p.notes ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, notes: v||null}: x)) }} width="100%" />
+                <TextField size="small" label="Notes" labelHidden value={p.notes ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, notes: v||null}: x)) }} width="100%" />
               </TableCell>
               <TableCell>
                 <Button size="small" onClick={()=> save(players.find(x=> x.id===p.id)!)} isLoading={loading}>{t('actions.save')}</Button>
@@ -297,7 +297,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
           </div>
           {uniModal.error && (<div style={{ color:'#b00', fontSize:12, marginTop:8 }}>{uniModal.error}</div>)}
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:12 }}>
-            <Button variation="link" onClick={()=> setUniModal(m=> ({...m, open:false }))}>{t('action.reload').replace('Reload','Cancel')}</Button>
+            <Button variation="link" onClick={()=> setUniModal(m=> ({...m, open:false }))}>Cancel</Button>
             <Button variation="primary" onClick={quickAddUniversity}>{t('actions.add')}</Button>
           </div>
         </div>
