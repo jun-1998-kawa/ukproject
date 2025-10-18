@@ -1,13 +1,15 @@
 ﻿/*
   aiCoach: Summarization + QA via Amazon Bedrock
   - Model is selected by env `AI_MODEL_ID` (e.g., anthropic.claude-3-5-sonnet-20240620-v1:0)
+  - Region is selected by env `AI_BEDROCK_REGION` (defaults to Lambda's AWS_REGION, fallback: us-east-1)
   - Designed for AppSync Lambda resolver style events (event.info.fieldName)
   - Also tolerates direct invocation with { op: 'summarize'|'ask', payload, question }
 */
 import AWS from 'aws-sdk'
 import crypto from 'crypto'
 
-const bedrock = new (AWS as any).BedrockRuntime({ region: process.env.AWS_REGION })
+const BEDROCK_REGION = process.env.AI_BEDROCK_REGION || process.env.AWS_REGION || 'us-east-1'
+const bedrock = new (AWS as any).BedrockRuntime({ region: BEDROCK_REGION })
 const MODEL_ID = process.env.AI_MODEL_ID || ''
 const SYSTEM_PROMPT_OVERRIDE = process.env.AI_SYSTEM_PROMPT || ''
 
