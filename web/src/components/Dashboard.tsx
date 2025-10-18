@@ -384,8 +384,28 @@ export default function Dashboard(props:{
     const total = items.reduce((s, [,v])=> s+v, 0)
     if(total<=0) return <div>-</div>
     const r = size/2, cx=r, cy=r
-    let acc = 0
     const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
+
+    // Special case: only one item (100%)
+    if(items.length === 1){
+      const [label, v] = items[0]
+      const pct = ((v/total)*100).toFixed(1)
+      return (
+        <div>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <circle cx={cx} cy={cy} r={r} fill={palette[0]} stroke="#fff" strokeWidth={1} />
+          </svg>
+          <div style={{ marginTop:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
+              <div style={{ width:12, height:12, background: palette[0], border:'1px solid #ccc', flexShrink:0 }}></div>
+              <span>{label} ({pct}%)</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    let acc = 0
     const paths = items.map(([label,v],i)=>{
       const a0 = (acc/total)*2*Math.PI - Math.PI/2; acc += v; const a1 = (i === items.length - 1) ? (2*Math.PI - Math.PI/2) : ((acc/total)*2*Math.PI - Math.PI/2)
       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
