@@ -2,13 +2,13 @@
 import { useTranslation } from 'react-i18next'
 import { View, Heading, Button, TextField, Table, TableHead, TableRow, TableCell, TableBody, Alert, SelectField, Badge } from '@aws-amplify/ui-react'
 
-type Player = { id: string; name: string; nameKana?: string|null; universityId?: string|null; enrollYear?: number|null; grade?: number|null; gradeOverride?: number|null; programYears?: number|null; studentNo?: string|null; dan?: string|null; preferredStance?: string|null; isActive?: boolean|null; notes?: string|null }
+type Player = { id: string; name: string; nameKana?: string|null; gender?: string|null; universityId?: string|null; enrollYear?: number|null; grade?: number|null; gradeOverride?: number|null; programYears?: number|null; studentNo?: string|null; dan?: string|null; preferredStance?: string|null; isActive?: boolean|null; notes?: string|null }
 type University = { id: string; name: string; shortName?: string|null }
 
-const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } nextToken } }`
+const listPlayersPage = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name nameKana gender universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } nextToken } }`
 const listUniversities = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
-const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
-const updatePlayerMutation = `mutation UpdatePlayer($input: UpdatePlayerInput!) { updatePlayer(input:$input){ id name nameKana universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
+const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerInput!) { createPlayer(input:$input){ id name nameKana gender universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
+const updatePlayerMutation = `mutation UpdatePlayer($input: UpdatePlayerInput!) { updatePlayer(input:$input){ id name nameKana gender universityId enrollYear grade gradeOverride programYears studentNo dan preferredStance isActive notes } }`
 const deletePlayerMutation = `mutation DeletePlayer($input: DeletePlayerInput!) { deletePlayer(input:$input){ id } }`
 
 export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promise<string|null> }){
@@ -21,6 +21,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
   const [filter, setFilter] = useState('')
   const [newName, setNewName] = useState('')
   const [newUniversityId, setNewUniversityId] = useState('')
+  const [newGender, setNewGender] = useState('')
   const [newEnrollYear, setNewEnrollYear] = useState<string>('')
   const [newDan, setNewDan] = useState('')
   const [newStance, setNewStance] = useState('')
@@ -124,6 +125,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
       const grade = calcGrade(enrollYear) ?? undefined
       const input:any = { name: newName.trim() }
       if(newUniversityId) input.universityId = newUniversityId
+      if(newGender) input.gender = newGender
       if(enrollYear) input.enrollYear = enrollYear
       if(grade) input.grade = grade
       if(newDan) input.dan = newDan
@@ -134,7 +136,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
       input.isActive = newIsActive
       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: createPlayerMutation, variables: { input } }) })
       const j: any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
-      setNewName(''); setNewUniversityId(''); setNewEnrollYear(''); setNewDan(''); setNewStance(''); setNewKana(''); setNewStudentNo(''); setNewNotes(''); setNewIsActive(true)
+      setNewName(''); setNewUniversityId(''); setNewGender(''); setNewEnrollYear(''); setNewDan(''); setNewStance(''); setNewKana(''); setNewStudentNo(''); setNewNotes(''); setNewIsActive(true)
       await load()
     } catch(e:any){ setError(String(e?.message ?? e)) } finally { setLoading(false) }
   }
@@ -143,7 +145,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
     setLoading(true); setError(null)
     try{
       const token = await getToken(); if(!token) return
-      const input:any = { id:p.id, name: p.name.trim(), nameKana: p.nameKana ?? null, universityId: p.universityId ?? null, enrollYear: p.enrollYear ?? null, grade: p.grade ?? null, gradeOverride: p.gradeOverride ?? null, programYears: p.programYears ?? null, studentNo: p.studentNo ?? null, dan: p.dan ?? null, preferredStance: p.preferredStance ?? null, isActive: p.isActive ?? null, notes: p.notes ?? null }
+      const input:any = { id:p.id, name: p.name.trim(), nameKana: p.nameKana ?? null, gender: p.gender ?? null, universityId: p.universityId ?? null, enrollYear: p.enrollYear ?? null, grade: p.grade ?? null, gradeOverride: p.gradeOverride ?? null, programYears: p.programYears ?? null, studentNo: p.studentNo ?? null, dan: p.dan ?? null, preferredStance: p.preferredStance ?? null, isActive: p.isActive ?? null, notes: p.notes ?? null }
       const r: Response = await fetch(apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization': token }, body: JSON.stringify({ query: updatePlayerMutation, variables: { input } }) })
       const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
       await load()
@@ -177,6 +179,11 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
         <Button onClick={()=> setUniModal({ open:true, name:'', shortName:'', code:'', error:null })}>
           + {t('nav.universities')}
         </Button>
+        <SelectField label={t('admin.players.gender') || 'Gender'} value={newGender} onChange={e=> setNewGender(e.target.value)} width="10rem">
+          <option value="">{t('placeholders.unselected')}</option>
+          <option value="MALE">{t('gender.MALE') || '男子'}</option>
+          <option value="FEMALE">{t('gender.FEMALE') || '女子'}</option>
+        </SelectField>
         <TextField label={t('admin.players.enrollYear')} type="number" value={newEnrollYear} onChange={e=> setNewEnrollYear(e.target.value)} width="9rem" />
         <TextField label={t('admin.players.dan')} value={newDan} onChange={e=> setNewDan(e.target.value)} width="9rem" />
         <SelectField label={t('admin.players.stance')} value={newStance} onChange={e=> setNewStance(e.target.value)} width="10rem">
@@ -201,6 +208,7 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
           <TableRow>
             <TableCell as="th" width="360">{t('admin.players.th.name')}</TableCell>
             <TableCell as="th" width="240">{t('admin.players.th.kana')}</TableCell>
+            <TableCell as="th" width="90">{t('admin.players.th.gender') || 'Gender'}</TableCell>
             <TableCell as="th" width="160">{t('admin.players.th.studentNo')}</TableCell>
             <TableCell as="th" width="200">{t('admin.players.th.university')}</TableCell>
             <TableCell as="th" width="100">{t('admin.players.th.enrollYear')}</TableCell>
@@ -220,6 +228,13 @@ export default function PlayersAdmin(props:{ apiUrl:string; getToken: ()=> Promi
               </TableCell>
               <TableCell>
                 <TextField size="small" labelHidden value={p.nameKana ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, nameKana:v||null}: x)) }} width="100%" />
+              </TableCell>
+              <TableCell>
+                <SelectField size="small" labelHidden value={p.gender ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, gender:v||null}: x)) }} width="100%">
+                  <option value="">-</option>
+                  <option value="MALE">{t('gender.MALE') || '男子'}</option>
+                  <option value="FEMALE">{t('gender.FEMALE') || '女子'}</option>
+                </SelectField>
               </TableCell>
               <TableCell>
                 <TextField size="small" labelHidden value={p.studentNo ?? ''} onChange={e=> { const v=e.target.value; setPlayers(list=> list.map(x=> x.id===p.id? {...x, studentNo:v||null}: x)) }} width="100%" />

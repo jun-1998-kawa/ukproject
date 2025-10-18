@@ -10,12 +10,13 @@ type Point = { tSec: number; target?: string | null; methods?: string[] | null; 
 export default function TeamDashboard(props:{
   matches: Match[]
   universities: Record<string,string>
+  players: Record<string,string>
   labelJa: { target: Record<string,string>, method: Record<string,string> }
   homeUniversityId?: string
-  ai?: { apiUrl: string; getToken: ()=>Promise<string> }
+  ai?: { apiUrl: string; getToken: ()=>Promise<string|null> }
 }){
   const { t, i18n } = useTranslation()
-  const { matches, universities, labelJa, homeUniversityId } = props
+  const { matches, universities, players, labelJa, homeUniversityId } = props
   const ai = props.ai
   const [teamId, setTeamId] = useState<string>('')
   const [from, setFrom] = useState<string>('')
@@ -136,9 +137,9 @@ export default function TeamDashboard(props:{
         }
       }
     }
-    return Object.entries(map).map(([playerId, v])=> ({ playerId, name: (props as any).players?.[playerId] || playerId, pf: v.pf, pa: v.pa }))
+    return Object.entries(map).map(([playerId, v])=> ({ playerId, name: players[playerId] || playerId, pf: v.pf, pa: v.pa }))
       .sort((a,b)=> (b.pf - a.pf) || (a.pa - b.pa))
-  }, [matches, teamId])
+  }, [matches, teamId, players])
 
   // Export helpers
   function downloadCSV(filename:string, rows: (string|number)[][]){
@@ -170,14 +171,26 @@ export default function TeamDashboard(props:{
     let acc = 0
     const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
     const paths = items.map(([label,v],i)=>{
-      const a0 = (acc/total)*2*Math.PI; acc += v; const a1 = (acc/total)*2*Math.PI
+      const a0 = (acc/total)*2*Math.PI - Math.PI/2; acc += v; const a1 = (i === items.length - 1) ? (2*Math.PI - Math.PI/2) : ((acc/total)*2*Math.PI - Math.PI/2)
       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
       return (<path key={i} d={d} fill={palette[i%palette.length]} stroke="#fff" strokeWidth={1} />)
     })
-    return (<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>)
+    const legend = items.map(([label,v],i)=>{
+      const pct = ((v/total)*100).toFixed(1)
+      return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
+        <div style={{ width:12, height:12, background: palette[i%palette.length], border:'1px solid #ccc', flexShrink:0 }}></div>
+        <span>{label} ({pct}%)</span>
+      </div>)
+    })
+    return (
+      <div>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>
+        <div style={{ marginTop:8 }}>{legend}</div>
+      </div>
+    )
   }
 
   return (
@@ -235,33 +248,39 @@ export default function TeamDashboard(props:{
           </View>
 
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
-            <Heading level={6}>{t('dashboard.vsOpponents') || 'Vs Teams'}</Heading>
-            <Table variation="bordered" highlightOnHover>
-              <TableHead>
-                <TableRow>
-                  <TableCell as="th">{t('dashboard.opponent') || 'Opponent'}</TableCell>
-                  <TableCell as="th">{t('dashboard.bouts')}</TableCell>
-                  <TableCell as="th">{t('dashboard.wins')}</TableCell>
-                  <TableCell as="th">{t('dashboard.losses')}</TableCell>
-                  <TableCell as="th">{t('dashboard.draws')}</TableCell>
-                  <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
-                  <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
-                </TableRow>
-              </TableHead>
-          <TableBody>
-                {(stat.vsTop as any).map(([oppId, v]:[string, any])=> (
-                  <TableRow key={oppId}>
-                    <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
-                    <TableCell>{v.bouts}</TableCell>
-                    <TableCell>{v.wins}</TableCell>
-                    <TableCell>{v.losses}</TableCell>
-                    <TableCell>{v.draws}</TableCell>
-                    <TableCell>{v.pf}</TableCell>
-                    <TableCell>{v.pa}</TableCell>
+            <Heading level={6}>{(officialFilter === 'intra' && teamId === homeUniversityId) ? (i18n.language?.startsWith('ja') ? '紅白戦統計' : 'Intra-Squad Stats') : (t('dashboard.vsOpponents') || 'Vs Teams')}</Heading>
+            {(officialFilter === 'intra' && teamId === homeUniversityId) ? (
+              <div style={{ padding: 10 }}>
+                <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>{i18n.language?.startsWith('ja') ? '部内戦は全員が同じチームなので、対戦相手別の統計は表示されません。全体の統計やPlayer Contributionを確認してください。' : 'Intra-squad matches do not show opponent stats since all players are on the same team. Please see overall stats or Player Contribution.'}</p>
+              </div>
+            ) : (
+              <Table variation="bordered" highlightOnHover>
+                <TableHead>
+                  <TableRow>
+                    <TableCell as="th">{t('dashboard.opponent') || 'Opponent'}</TableCell>
+                    <TableCell as="th">{t('dashboard.bouts')}</TableCell>
+                    <TableCell as="th">{t('dashboard.wins')}</TableCell>
+                    <TableCell as="th">{t('dashboard.losses')}</TableCell>
+                    <TableCell as="th">{t('dashboard.draws')}</TableCell>
+                    <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
+                    <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {(stat.vsTop as any).map(([oppId, v]:[string, any])=> (
+                    <TableRow key={oppId}>
+                      <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
+                      <TableCell>{v.bouts}</TableCell>
+                      <TableCell>{v.wins}</TableCell>
+                      <TableCell>{v.losses}</TableCell>
+                      <TableCell>{v.draws}</TableCell>
+                      <TableCell>{v.pf}</TableCell>
+                      <TableCell>{v.pa}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </View>
           {ai && (
             <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end' }}>
