@@ -139,7 +139,7 @@ export default function UniversitiesAdmin(props:{ apiUrl:string; getToken: ()=> 
                 </label>
               </TableCell>
               <TableCell>
-                <Button size="small" onClick={()=> save(u)} isLoading={loading}>{t('actions.save')}</Button>
+                <Button size="small" onClick={()=> save(list.find(x=> x.id===u.id)!)} isLoading={loading}>{t('actions.save')}</Button>
                 <Button size="small" variation="destructive" onClick={()=> remove(u.id)} isLoading={loading} marginLeft="0.5rem">{t('actions.delete')}</Button>
               </TableCell>
             </TableRow>
