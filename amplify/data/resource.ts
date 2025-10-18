@@ -79,6 +79,7 @@ const schema = a.schema({
     concededPoints: a.hasMany("Point","opponentPlayerId"),
     awardedExchanges: a.hasMany("Exchange","awardedToPlayerId"),
     actions: a.hasMany("Action","actorPlayerId"),
+    analyses: a.hasMany("PlayerAnalysis","playerId"),
   }).secondaryIndexes((idx)=>[
     idx("universityId").queryField("listPlayersByUniversity"),
     idx("name").queryField("listPlayersByName"),
@@ -177,6 +178,7 @@ const schema = a.schema({
     points: a.hasMany("Point","boutId"),
     exchanges: a.hasMany("Exchange","boutId"),
     actions: a.hasMany("Action","boutId"),
+    analyses: a.hasMany("BoutAnalysis","boutId"),
   }).secondaryIndexes((idx)=>[
     idx("matchId").queryField("listBoutsByMatch"),
     idx("ourPlayerId").queryField("listBoutsByOurPlayer"),
@@ -285,6 +287,41 @@ const schema = a.schema({
     idx("date").sortKeys(["playerId"]).queryField("listAggMethodByDate"),
   ]).authorization((allow)=>[
     allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["create","update","read"]),
+    allow.groups(["VIEWERS"]).to(["read"]),
+  ]),
+
+  // Qualitative Analysis Models for structured coaching comments
+  BoutAnalysis: a.model({
+    boutId: a.id().required(),
+    bout: a.belongsTo("Bout","boutId"),
+    category: a.enum(["STRENGTH","WEAKNESS","TACTICAL","MENTAL","TECHNICAL","OTHER"]),
+    content: a.string().required(),
+    importance: a.enum(["HIGH","MEDIUM","LOW"]),
+    tags: a.string().array(),
+    recordedAt: a.datetime().required(),
+    recordedBy: a.string(),
+  }).secondaryIndexes((idx)=>[
+    idx("boutId").sortKeys(["recordedAt"]).queryField("listBoutAnalysisByBout"),
+  ]).authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["create","update","delete","read"]),
+    allow.groups(["VIEWERS"]).to(["read"]),
+  ]),
+
+  PlayerAnalysis: a.model({
+    playerId: a.id().required(),
+    player: a.belongsTo("Player","playerId"),
+    category: a.enum(["STRENGTH","WEAKNESS","TACTICAL","MENTAL","TECHNICAL","PHYSICAL","OTHER"]),
+    content: a.string().required(),
+    importance: a.enum(["HIGH","MEDIUM","LOW"]),
+    tags: a.string().array(),
+    periodStart: a.date(),
+    periodEnd: a.date(),
+    recordedAt: a.datetime().required(),
+    recordedBy: a.string(),
+  }).secondaryIndexes((idx)=>[
+    idx("playerId").sortKeys(["recordedAt"]).queryField("listPlayerAnalysisByPlayer"),
+  ]).authorization((allow)=>[
+    allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["create","update","delete","read"]),
     allow.groups(["VIEWERS"]).to(["read"]),
   ]),
 

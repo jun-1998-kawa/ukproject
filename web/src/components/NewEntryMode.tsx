@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react'
+﻿import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { View, Table, TableHead, TableRow, TableCell, TableBody, Button, SelectField, TextField, Badge } from '@aws-amplify/ui-react'
 import { methodAllowedForTargetJaLabel } from '../lib/tech'
@@ -178,6 +178,7 @@ export default function NewEntryMode(props: {
   const [allowHantei, setAllowHantei] = useState<boolean>(false)
   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
   const [savingId, setSavingId] = useState<string>('')
+  const [analysisModal, setAnalysisModal] = useState<{ open: boolean; boutId: string; category: string; content: string; importance: string; tags: string }>({ open: false, boutId: '', category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })
 
   useEffect(()=>{
     const init: Record<string, RowState> = {}
@@ -249,6 +250,7 @@ export default function NewEntryMode(props: {
   const deletePointMutation = `mutation DeletePoint($input: DeletePointInput!) { deletePoint(input:$input){ id } }`
   const deleteBoutMutation = `mutation DeleteBout($input: DeleteBoutInput!) { deleteBout(input:$input){ id } }`
   const deleteMatchMutation = `mutation DeleteMatch($input: DeleteMatchInput!) { deleteMatch(input:$input){ id } }`
+  const createBoutAnalysisMutation = `mutation CreateBoutAnalysis($input: CreateBoutAnalysisInput!) { createBoutAnalysis(input:$input){ id boutId category content importance tags recordedAt } }`
 
   const [delModal, setDelModal] = useState<{ open:boolean; kind:'bout'|'match'; targetId: string; bout?: Bout|null }|null>(null)
 
@@ -376,6 +378,20 @@ export default function NewEntryMode(props: {
     setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })
   }
 
+  async function saveBoutAnalysis(){
+    const { boutId, category, content, importance, tags } = analysisModal
+    if(!content.trim()){ alert(t('errors.analysisContentRequired') || 'Content is required'); return }
+    try{
+      const token = await getToken(); if(!token) return
+      const tagsArray = tags.trim() ? tags.split(',').map(t=> t.trim()).filter(Boolean) : []
+      const input:any = { boutId, category, content: content.trim(), importance, tags: tagsArray.length > 0 ? tagsArray : null, recordedAt: new Date().toISOString() }
+      const r = await fetch(apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createBoutAnalysisMutation, variables:{ input } })});
+      const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+      setAnalysisModal({ open: false, boutId: '', category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })
+      alert(t('notices.saved'))
+    }catch(e:any){ alert(String(e?.message ?? e)) }
+  }
+
   function buildPlayerOptionsEx(list: PlayerEx[], unis: University[], filter: string){
     const f = filter.trim().toLowerCase(); const grouped: Record<string, PlayerEx[]> = {}
     for(const p of list){ if(f && !p.name.toLowerCase().includes(f)) continue; const key = p.universityId ?? 'unknown'; (grouped[key]??=[]).push(p) }
@@ -390,6 +406,11 @@ export default function NewEntryMode(props: {
     return ipponIsValid(s.left1) || ipponIsValid(s.left2) || ipponIsValid(s.right1) || ipponIsValid(s.right2) || (s.leftFouls>=2) || (s.rightFouls>=2)
   }
   function getPlayerName(playerId: string){ return playersEx.find(p=> p.id===playerId)?.name ?? players[playerId] ?? playerId }
+
+  // Sort bouts by ID to ensure consistent display order (newly added bouts appear at the bottom)
+  const sortedBouts = useMemo(() => {
+    return [...boutsLocal].sort((a, b) => a.id.localeCompare(b.id))
+  }, [boutsLocal])
 
   return (
     <>
@@ -447,8 +468,8 @@ export default function NewEntryMode(props: {
             <TableCell as="th" width="16%">{t('columns.leftPlayer')}</TableCell>
             <TableCell as="th" width="16%">A {t('columns.first')}</TableCell>
             <TableCell as="th" width="16%">A {t('columns.second')}</TableCell>
-            <TableCell as="th" width="16%">B {t('columns.first')}</TableCell>
             <TableCell as="th" width="16%">B {t('columns.second')}</TableCell>
+            <TableCell as="th" width="16%">B {t('columns.first')}</TableCell>
             <TableCell as="th" width="16%">{t('columns.rightPlayer')}</TableCell>
             <TableCell as="th" width="8%">{t('columns.actions')}</TableCell>
           </TableRow>
@@ -536,7 +557,7 @@ export default function NewEntryMode(props: {
           </TableRow>
         </TableHead>
         <TableBody>
-          {boutsLocal.map((b)=>{
+          {sortedBouts.map((b)=>{
             const s = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 }
             const rowValid = [s.left1, s.left2, s.right1, s.right2].every(ipponValidOrEmpty)
             const hasData = rowHasData(s)
@@ -562,10 +583,10 @@ export default function NewEntryMode(props: {
                     <IpponCell value={s.left2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, left2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
+                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
-                    <IpponCell value={s.right2} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right2: next }}))} targets={safeTargets} methods={safeMethods} />
+                    <IpponCell value={s.right1} onFocus={()=> setFocusBoutId(b.id)} onChange={(next)=> setRows(r=> ({...r, [b.id]: { ...s, right1: next }}))} targets={safeTargets} methods={safeMethods} />
                 </TableCell>
                 <TableCell>
                   <div style={{ display:'flex', flexDirection:'column', gap:3 }}>
@@ -583,8 +604,9 @@ export default function NewEntryMode(props: {
                 <TableCell>
                   {!rowValid && (<div style={{ color:'#d17', fontSize:12, marginBottom:4 }}>{t('warnings.incompleteInputs')}</div>)}
                   {rowValid && autoResult && (<div style={{ color:'#666', fontSize:11, marginBottom:4 }}>{t('hints.saveAutoJudgement')}</div>)}
-                  <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                  <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   <Button size="small" onClick={()=> saveRow(b)} isDisabled={!rowValid || savingId===b.id} isLoading={savingId===b.id}>{t('actions.save')}</Button>
+                  <Button size="small" variation="link" onClick={()=> setAnalysisModal({ open:true, boutId: b.id, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })}>{t('analysis.addAnalysis')}</Button>
                   <Button size="small" variation="link" colorTheme="warning" onClick={()=> setDelModal({ open:true, bout: b })}>{t('actions.delete')}</Button>
                     {!autoResult && (
                       <>
@@ -682,6 +704,46 @@ export default function NewEntryMode(props: {
           <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
             <Button onClick={()=> setNewPlayerModal({ open: false, side: 'left', name: '', universityId: '', gender: '', stance: '' })} variation="link">{t('action.cancel')}</Button>
             <Button variation="primary" onClick={registerNewPlayer} isDisabled={!newPlayerModal.name.trim() || !newPlayerModal.universityId}>{t('actions.register')}</Button>
+          </div>
+        </div>
+      </div>
+    )}
+    {analysisModal.open && (
+      <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1200 }} onClick={()=> setAnalysisModal({ ...analysisModal, open: false })}>
+        <div style={{ background:'#fff', minWidth:400, maxWidth:600, width:'90%', padding:16, borderRadius:8 }} onClick={e=> e.stopPropagation()}>
+          <h4 style={{ marginTop:0 }}>{t('analysis.boutAnalysis')}</h4>
+          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.category')}</label>
+              <select value={analysisModal.category} onChange={e=> setAnalysisModal({ ...analysisModal, category: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
+                <option value="STRENGTH">{t('analysis.categories.STRENGTH')}</option>
+                <option value="WEAKNESS">{t('analysis.categories.WEAKNESS')}</option>
+                <option value="TACTICAL">{t('analysis.categories.TACTICAL')}</option>
+                <option value="MENTAL">{t('analysis.categories.MENTAL')}</option>
+                <option value="TECHNICAL">{t('analysis.categories.TECHNICAL')}</option>
+                <option value="OTHER">{t('analysis.categories.OTHER')}</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.importance')}</label>
+              <select value={analysisModal.importance} onChange={e=> setAnalysisModal({ ...analysisModal, importance: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }}>
+                <option value="HIGH">{t('analysis.importance_levels.HIGH')}</option>
+                <option value="MEDIUM">{t('analysis.importance_levels.MEDIUM')}</option>
+                <option value="LOW">{t('analysis.importance_levels.LOW')}</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.content')}</label>
+              <textarea value={analysisModal.content} onChange={e=> setAnalysisModal({ ...analysisModal, content: e.target.value })} style={{ width:'100%', padding:'8px', fontSize:14, border:'1px solid #ccc', borderRadius:4, minHeight:120, fontFamily:'inherit' }} placeholder={t('analysis.content')} />
+            </div>
+            <div>
+              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{t('analysis.tags')}</label>
+              <input type="text" value={analysisModal.tags} onChange={e=> setAnalysisModal({ ...analysisModal, tags: e.target.value })} style={{ width:'100%', padding:'6px 8px', fontSize:14, border:'1px solid #ccc', borderRadius:4 }} placeholder="tag1, tag2, tag3" />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
+            <Button onClick={()=> setAnalysisModal({ open: false, boutId: '', category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })} variation="link">{t('action.cancel')}</Button>
+            <Button variation="primary" onClick={saveBoutAnalysis} isDisabled={!analysisModal.content.trim()}>{t('actions.save')}</Button>
           </div>
         </div>
       </div>

@@ -68,7 +68,8 @@
     "errors":  {
                    "refDataLoadFailed":  "参照データの取得に失敗しました。再読み込みしてください。",
                    "universityRequired":  "所属は必須です",
-                   "notSignedIn":  "サインインされていません。サインインしてください"
+                   "notSignedIn":  "サインインされていません。サインインしてください",
+                   "analysisContentRequired":  "分析内容は必須です"
                },
     "nav":  {
                 "playersRegister":  "選手登録",
@@ -135,6 +136,7 @@
                                   "kana":  "かな",
                                   "studentNo":  "学籍番号",
                                   "universityReq":  "所属（必須）",
+                                  "gender":  "性別",
                                   "enrollYear":  "入学年",
                                   "dan":  "段級位",
                                   "stance":  "構え",
@@ -144,6 +146,7 @@
                                   "th":  {
                                              "name":  "名前",
                                              "kana":  "かな",
+                                             "gender":  "性別",
                                              "studentNo":  "学籍番号",
                                              "university":  "所属",
                                              "enrollYear":  "入学年",
@@ -284,5 +287,33 @@
                    "players":  "選手貢献をCSV出力",
                    "tournaments":  "大会別成績をCSV出力",
                    "vsTeams":  "対戦団体成績をCSV出力"
-               }
+               },
+    "analysis":  {
+                     "boutAnalysis":  "対戦分析",
+                     "playerAnalysis":  "選手分析",
+                     "addAnalysis":  "分析を追加",
+                     "category":  "カテゴリ",
+                     "content":  "内容",
+                     "importance":  "重要度",
+                     "tags":  "タグ（カンマ区切り）",
+                     "categories":  {
+                                        "STRENGTH":  "強み",
+                                        "WEAKNESS":  "課題",
+                                        "TACTICAL":  "戦術",
+                                        "MENTAL":  "メンタル",
+                                        "TECHNICAL":  "技術",
+                                        "PHYSICAL":  "体力",
+                                        "OTHER":  "その他"
+                                    },
+                     "importance_levels":  {
+                                               "HIGH":  "高",
+                                               "MEDIUM":  "中",
+                                               "LOW":  "低"
+                                           },
+                     "noAnalyses":  "分析コメントはまだありません",
+                     "period":  "期間",
+                     "from":  "開始日",
+                     "to":  "終了日",
+                     "recordedAt":  "記録日時"
+                 }
 }
