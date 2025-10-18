@@ -34,7 +34,11 @@ export default function Dashboard(props:{
   const [aiPayload, setAiPayload] = useState<any|null>(null)
   const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
   const [universities, setUniversities] = useState<Record<string, string>>({})
-  const [analysisModal, setAnalysisModal] = useState<{ open: boolean; category: string; content: string; importance: string; tags: string; periodStart: string; periodEnd: string }>({ open: false, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: '', periodEnd: '' })
+  const [analysisModal, setAnalysisModal] = useState<{ open: boolean; id?: string; category: string; content: string; importance: string; tags: string; periodStart: string; periodEnd: string }>({ open: false, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: '', periodEnd: '' })
+  const [playerAnalyses, setPlayerAnalyses] = useState<any[]>([])
+  const [boutAnalyses, setBoutAnalyses] = useState<any[]>([])
+  const [showAnalyses, setShowAnalyses] = useState(false)
+  const [analysisFilter, setAnalysisFilter] = useState<{ category: string; importance: string; tag: string }>({ category: 'all', importance: 'all', tag: '' })
 
   // Fetch players with extended info (gender, university, grade)
   useEffect(()=>{
@@ -73,6 +77,60 @@ export default function Dashboard(props:{
     }
     fetchUniversities()
   }, [])
+
+  // Fetch player analyses when player is selected
+  useEffect(()=>{
+    async function fetchPlayerAnalyses(){
+      if(!playerId || !ai) return
+      try{
+        const token = await ai.getToken(); if(!token) return
+        const q = `query ListPlayerAnalysisByPlayer($playerId:ID!){ listPlayerAnalysisByPlayer(playerId:$playerId){ items{ id playerId category content importance tags periodStart periodEnd recordedAt } } }`
+        const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: q, variables:{ playerId } }) })
+        const j:any = await r.json()
+        if(j.data?.listPlayerAnalysisByPlayer?.items){
+          setPlayerAnalyses(j.data.listPlayerAnalysisByPlayer.items)
+        } else {
+          setPlayerAnalyses([])
+        }
+      }catch{ setPlayerAnalyses([]) }
+    }
+    fetchPlayerAnalyses()
+  }, [playerId])
+
+  // Fetch bout analyses when player is selected
+  useEffect(()=>{
+    async function fetchBoutAnalyses(){
+      if(!playerId || !ai) return
+      try{
+        const token = await ai.getToken(); if(!token) return
+
+        // Collect bout IDs for this player
+        const boutIds: string[] = []
+        for(const m of matches){
+          for(const b of (m.bouts?.items ?? [])){
+            if(b.ourPlayerId===playerId || b.opponentPlayerId===playerId){
+              boutIds.push(b.id)
+            }
+          }
+        }
+
+        // Fetch bout analyses for these bouts
+        const analyses: any[] = []
+        for(const boutId of boutIds){
+          try{
+            const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId category content importance tags recordedAt } } }`
+            const r = await fetch(ai.apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: q, variables:{ boutId } }) })
+            const j:any = await r.json()
+            if(j.data?.listBoutAnalysisByBout?.items){
+              analyses.push(...j.data.listBoutAnalysisByBout.items)
+            }
+          }catch{}
+        }
+        setBoutAnalyses(analyses)
+      }catch{ setBoutAnalyses([]) }
+    }
+    fetchBoutAnalyses()
+  }, [playerId, matches])
 
   const playerList = useMemo(() => {
     let list = Object.entries(players).map(([id, name]) => {
@@ -191,34 +249,134 @@ export default function Dashboard(props:{
     }
   }
 
+  // Filter analyses
+  const filteredPlayerAnalyses = useMemo(()=>{
+    let filtered = playerAnalyses
+    if(analysisFilter.category !== 'all'){
+      filtered = filtered.filter(a=> a.category === analysisFilter.category)
+    }
+    if(analysisFilter.importance !== 'all'){
+      filtered = filtered.filter(a=> a.importance === analysisFilter.importance)
+    }
+    if(analysisFilter.tag.trim()){
+      const query = analysisFilter.tag.trim().toLowerCase()
+      filtered = filtered.filter(a=> {
+        const tags = (a.tags || []).join(',').toLowerCase()
+        return tags.includes(query) || a.content.toLowerCase().includes(query)
+      })
+    }
+    // Filter by date range
+    if(from || to){
+      filtered = filtered.filter(a=>{
+        if(from && a.periodEnd && a.periodEnd < from) return false
+        if(to && a.periodStart && a.periodStart > to) return false
+        return true
+      })
+    }
+    // Sort by recordedAt desc
+    return filtered.sort((a,b)=> (b.recordedAt||'').localeCompare(a.recordedAt||''))
+  }, [playerAnalyses, analysisFilter, from, to])
+
+  const filteredBoutAnalyses = useMemo(()=>{
+    let filtered = boutAnalyses
+    if(analysisFilter.category !== 'all'){
+      filtered = filtered.filter(a=> a.category === analysisFilter.category)
+    }
+    if(analysisFilter.importance !== 'all'){
+      filtered = filtered.filter(a=> a.importance === analysisFilter.importance)
+    }
+    if(analysisFilter.tag.trim()){
+      const query = analysisFilter.tag.trim().toLowerCase()
+      filtered = filtered.filter(a=> {
+        const tags = (a.tags || []).join(',').toLowerCase()
+        return tags.includes(query) || a.content.toLowerCase().includes(query)
+      })
+    }
+    // Sort by recordedAt desc
+    return filtered.sort((a,b)=> (b.recordedAt||'').localeCompare(a.recordedAt||''))
+  }, [boutAnalyses, analysisFilter])
+
   const createPlayerAnalysisMutation = `mutation CreatePlayerAnalysis($input: CreatePlayerAnalysisInput!) {
     createPlayerAnalysis(input:$input){
       id playerId category content importance tags periodStart periodEnd recordedAt
     }
   }`
 
+  const updatePlayerAnalysisMutation = `mutation UpdatePlayerAnalysis($input: UpdatePlayerAnalysisInput!) {
+    updatePlayerAnalysis(input:$input){
+      id playerId category content importance tags periodStart periodEnd recordedAt
+    }
+  }`
+
+  const deletePlayerAnalysisMutation = `mutation DeletePlayerAnalysis($input: DeletePlayerAnalysisInput!) {
+    deletePlayerAnalysis(input:$input){
+      id
+    }
+  }`
+
   async function savePlayerAnalysis(){
-    const { category, content, importance, tags, periodStart, periodEnd } = analysisModal
+    const { id, category, content, importance, tags, periodStart, periodEnd } = analysisModal
     if(!playerId){ alert(t('dashboard.noData') || 'Please select a player'); return }
     if(!content.trim()){ alert(t('errors.analysisContentRequired') || 'Content is required'); return }
     if(!ai){ alert(t('errors.notSignedIn') || 'Not signed in'); return }
     try{
       const token = await ai.getToken(); if(!token) return
       const tagsArray = tags.trim() ? tags.split(',').map(t=> t.trim()).filter(Boolean) : []
-      const input:any = {
-        playerId,
-        category,
-        content: content.trim(),
-        importance,
-        tags: tagsArray.length > 0 ? tagsArray : null,
-        periodStart: periodStart || null,
-        periodEnd: periodEnd || null,
-        recordedAt: new Date().toISOString()
+
+      if(id){
+        // Update existing analysis
+        const input:any = {
+          id,
+          category,
+          content: content.trim(),
+          importance,
+          tags: tagsArray.length > 0 ? tagsArray : null,
+          periodStart: periodStart || null,
+          periodEnd: periodEnd || null,
+        }
+        const r = await fetch(ai.apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:updatePlayerAnalysisMutation, variables:{ input } })});
+        const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+      } else {
+        // Create new analysis
+        const input:any = {
+          playerId,
+          category,
+          content: content.trim(),
+          importance,
+          tags: tagsArray.length > 0 ? tagsArray : null,
+          periodStart: periodStart || null,
+          periodEnd: periodEnd || null,
+          recordedAt: new Date().toISOString()
+        }
+        const r = await fetch(ai.apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createPlayerAnalysisMutation, variables:{ input } })});
+        const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
       }
-      const r = await fetch(ai.apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createPlayerAnalysisMutation, variables:{ input } })});
-      const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+
       setAnalysisModal({ open: false, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: '', periodEnd: '' })
+
+      // Reload analyses
+      const q = `query ListPlayerAnalysisByPlayer($playerId:ID!){ listPlayerAnalysisByPlayer(playerId:$playerId){ items{ id playerId category content importance tags periodStart periodEnd recordedAt } } }`
+      const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: q, variables:{ playerId } }) })
+      const j:any = await r.json()
+      if(j.data?.listPlayerAnalysisByPlayer?.items){
+        setPlayerAnalyses(j.data.listPlayerAnalysisByPlayer.items)
+      }
+
       alert(t('notices.saved'))
+    }catch(e:any){ alert(String(e?.message ?? e)) }
+  }
+
+  async function deletePlayerAnalysis(id: string){
+    if(!confirm(t('confirm.delete') || 'Delete?')) return
+    if(!ai) return
+    try{
+      const token = await ai.getToken(); if(!token) return
+      const r = await fetch(ai.apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:deletePlayerAnalysisMutation, variables:{ input: { id } } })});
+      const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+
+      // Reload analyses
+      setPlayerAnalyses(prev=> prev.filter(a=> a.id !== id))
+      alert(t('notices.deleted') || 'Deleted')
     }catch(e:any){ alert(String(e?.message ?? e)) }
   }
 
@@ -354,6 +512,9 @@ export default function Dashboard(props:{
         </View>
         {ai && (
           <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end', gap:'0.5rem' }}>
+            <Button onClick={()=> setShowAnalyses(!showAnalyses)}>
+              {showAnalyses ? (i18n.language?.startsWith('ja') ? '分析記録を非表示' : 'Hide Analyses') : (i18n.language?.startsWith('ja') ? '分析記録を表示' : 'Show Analyses')}
+            </Button>
             <Button onClick={()=> setAnalysisModal({ open: true, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: from, periodEnd: to })}>
               {t('analysis.playerAnalysis')}
             </Button>
@@ -442,6 +603,84 @@ export default function Dashboard(props:{
         )}
       </View>
       )}
+
+      {showAnalyses && playerId && ai && (
+        <View marginTop="1rem" padding="1rem" style={{ border:'1px solid #eee', borderRadius:8 }}>
+          <Heading level={5}>{i18n.language?.startsWith('ja') ? '分析記録' : 'Analysis Records'}</Heading>
+
+          <Flex gap="0.5rem" marginTop="0.75rem" wrap="wrap" alignItems="flex-end">
+            <SelectField label={t('analysis.category')} value={analysisFilter.category} onChange={e=> setAnalysisFilter({...analysisFilter, category: e.target.value})} size="small" width="12rem">
+              <option value="all">{t('filters.all')}</option>
+              <option value="STRENGTH">{t('analysis.categories.STRENGTH')}</option>
+              <option value="WEAKNESS">{t('analysis.categories.WEAKNESS')}</option>
+              <option value="TACTICAL">{t('analysis.categories.TACTICAL')}</option>
+              <option value="MENTAL">{t('analysis.categories.MENTAL')}</option>
+              <option value="TECHNICAL">{t('analysis.categories.TECHNICAL')}</option>
+              <option value="PHYSICAL">{t('analysis.categories.PHYSICAL')}</option>
+              <option value="OTHER">{t('analysis.categories.OTHER')}</option>
+            </SelectField>
+            <SelectField label={t('analysis.importance')} value={analysisFilter.importance} onChange={e=> setAnalysisFilter({...analysisFilter, importance: e.target.value})} size="small" width="10rem">
+              <option value="all">{t('filters.all')}</option>
+              <option value="HIGH">{t('analysis.importance_levels.HIGH')}</option>
+              <option value="MEDIUM">{t('analysis.importance_levels.MEDIUM')}</option>
+              <option value="LOW">{t('analysis.importance_levels.LOW')}</option>
+            </SelectField>
+            <TextField label={i18n.language?.startsWith('ja') ? 'タグ・キーワード検索' : 'Tag/Keyword'} value={analysisFilter.tag} onChange={e=> setAnalysisFilter({...analysisFilter, tag: e.target.value})} width="16rem" />
+            <Button onClick={()=> setAnalysisFilter({ category: 'all', importance: 'all', tag: '' })}>{t('dashboard.clear')}</Button>
+          </Flex>
+
+          {/* Player Analyses */}
+          <View marginTop="1rem">
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '選手分析記録' : 'Player Analysis Records'} ({filteredPlayerAnalyses.length})</Heading>
+            {filteredPlayerAnalyses.length === 0 && (
+              <div style={{ color:'#666', marginTop:'0.5rem' }}>{i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}</div>
+            )}
+            {filteredPlayerAnalyses.map(a=> (
+              <View key={a.id} marginTop="0.75rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
+                <Flex justifyContent="space-between" alignItems="flex-start">
+                  <div>
+                    <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
+                      <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'}>{t(`analysis.categories.${a.category}`)}</Badge>
+                      <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'}>{t(`analysis.importance_levels.${a.importance}`)}</Badge>
+                      {a.tags && a.tags.length > 0 && a.tags.map((tag:string, i:number)=> (<Badge key={i}>{tag}</Badge>))}
+                    </div>
+                    {a.periodStart && a.periodEnd && (
+                      <div style={{ fontSize:11, color:'#666', marginBottom:4 }}>{a.periodStart} ～ {a.periodEnd}</div>
+                    )}
+                    <div style={{ marginTop:6, whiteSpace:'pre-wrap' }}>{a.content}</div>
+                    <div style={{ fontSize:11, color:'#999', marginTop:6 }}>{a.recordedAt ? new Date(a.recordedAt).toLocaleString() : ''}</div>
+                  </div>
+                  <Flex gap="0.5rem">
+                    <Button size="small" onClick={()=> setAnalysisModal({ open: true, id: a.id, category: a.category, content: a.content, importance: a.importance, tags: (a.tags||[]).join(', '), periodStart: a.periodStart||'', periodEnd: a.periodEnd||'' })}>{t('actions.edit') || 'Edit'}</Button>
+                    <Button size="small" variation="destructive" onClick={()=> deletePlayerAnalysis(a.id)}>{t('actions.delete')}</Button>
+                  </Flex>
+                </Flex>
+              </View>
+            ))}
+          </View>
+
+          {/* Bout Analyses */}
+          <View marginTop="1.5rem">
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '試合分析記録' : 'Bout Analysis Records'} ({filteredBoutAnalyses.length})</Heading>
+            {filteredBoutAnalyses.length === 0 && (
+              <div style={{ color:'#666', marginTop:'0.5rem' }}>{i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}</div>
+            )}
+            {filteredBoutAnalyses.map(a=> (
+              <View key={a.id} marginTop="0.75rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
+                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
+                  <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'}>{t(`analysis.categories.${a.category}`)}</Badge>
+                  <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'}>{t(`analysis.importance_levels.${a.importance}`)}</Badge>
+                  {a.tags && a.tags.length > 0 && a.tags.map((tag:string, i:number)=> (<Badge key={i}>{tag}</Badge>))}
+                  <span style={{ fontSize:11, color:'#666' }}>Bout ID: {a.boutId.substring(0,8)}...</span>
+                </div>
+                <div style={{ marginTop:6, whiteSpace:'pre-wrap' }}>{a.content}</div>
+                <div style={{ fontSize:11, color:'#999', marginTop:6 }}>{a.recordedAt ? new Date(a.recordedAt).toLocaleString() : ''}</div>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
       {ai && (
         <AIPanel open={aiOpen} onClose={()=> setAiOpen(false)} apiUrl={ai.apiUrl} getToken={ai.getToken} payload={aiPayload} />
       )}
