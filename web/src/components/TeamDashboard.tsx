@@ -149,17 +149,17 @@ export default function TeamDashboard(props:{
     const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url)
   }
   function exportPlayers(){
-    const header = [t('dashboard.player')||'Player', t('dashboard.pointsFor')||'PF', t('dashboard.pointsAgainst')||'PA']
+    const header = [t('dashboard.player'), t('dashboard.pointsFor'), t('dashboard.pointsAgainst')]
     const rows = playerContrib.map(p=> [p.name, p.pf, p.pa])
     downloadCSV('team_players.csv', [header, ...rows])
   }
   function exportVsTeams(){
-    const header = [t('dashboard.opponent')||'Opponent', t('dashboard.bouts')||'Bouts', t('dashboard.wins')||'Wins', t('dashboard.losses')||'Losses', t('dashboard.draws')||'Draws', t('dashboard.pointsFor')||'PF', t('dashboard.pointsAgainst')||'PA']
+    const header = [t('dashboard.opponent'), t('dashboard.bouts'), t('dashboard.wins'), t('dashboard.losses'), t('dashboard.draws'), t('dashboard.pointsFor'), t('dashboard.pointsAgainst')]
     const rows = (stat?.vsTop||[]).map(([oppId, v]: any)=> [universities[oppId]||oppId, v.bouts, v.wins, v.losses, v.draws, v.pf, v.pa])
     downloadCSV('team_vs_teams.csv', [header, ...rows])
   }
   function exportTournaments(){
-    const header = [t('dashboard.tournament')||'Tournament', t('dashboard.matches')||'Matches', t('dashboard.wins')||'Wins', t('dashboard.losses')||'Losses', t('dashboard.draws')||'Draws', t('dashboard.winRate')||'Win%']
+    const header = [t('dashboard.tournament'), t('dashboard.matches'), t('dashboard.wins'), t('dashboard.losses'), t('dashboard.draws'), t('dashboard.winRate')]
     const rows = (matchStats?.ranking||[]).map(r=> [r.name, r.matches, r.wins, r.losses, r.draws, (r.winRate*100).toFixed(1)])
     downloadCSV('team_tournaments.csv', [header, ...rows])
   }
@@ -195,10 +195,10 @@ export default function TeamDashboard(props:{
 
   return (
     <View>
-      <Heading level={4}>{t('dashboard.teamTitle') || 'Team Dashboard'}</Heading>
+      <Heading level={4}>{t('dashboard.teamTitle')}</Heading>
       <View marginTop="0.5rem">
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
-          <SelectField label={t('dashboard.selectTeam') || 'Team'} value={teamId} onChange={e=> setTeamId(e.target.value)} size="small" width="18rem">
+          <SelectField label={t('dashboard.selectTeam')} value={teamId} onChange={e=> setTeamId(e.target.value)} size="small" width="18rem">
             <option value="">--</option>
             {teamList.map(([id,name])=> (<option key={id} value={id}>{name}</option>))}
           </SelectField>
@@ -208,7 +208,7 @@ export default function TeamDashboard(props:{
             <option value="all">{t('filters.all')}</option>
             <option value="official">{t('filters.official')}</option>
             <option value="practice">{t('filters.practice')}</option>
-            <option value="intra">{t('filters.intra') ?? 'Intra-squad only'}</option>
+            <option value="intra">{t('filters.intra')}</option>
           </SelectField>
           <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
           <SelectField label={t('dashboard.topN')} value={String(topN)} onChange={e=> setTopN(Number(e.target.value))} size="small" width="10rem">
@@ -216,10 +216,10 @@ export default function TeamDashboard(props:{
           </SelectField>
           <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all') }}>{t('dashboard.clear')}</Button>
           <div className="no-print" style={{ display:'flex', gap:8 }}>
-            <Button onClick={exportPlayers}>{t('export.players')||'Export Players (CSV)'}</Button>
-            <Button onClick={exportVsTeams}>{t('export.vsTeams')||'Export Vs Teams (CSV)'}</Button>
-            <Button onClick={exportTournaments}>{t('export.tournaments')||'Export Tournaments (CSV)'}</Button>
-            <Button variation="link" onClick={()=> window.print()}>{t('export.print')||'Print'}</Button>
+            <Button onClick={exportPlayers}>{t('export.players')}</Button>
+            <Button onClick={exportVsTeams}>{t('export.vsTeams')}</Button>
+            <Button onClick={exportTournaments}>{t('export.tournaments')}</Button>
+            <Button variation="link" onClick={()=> window.print()}>{t('export.print')}</Button>
           </div>
         </Flex>
       </View>
@@ -248,16 +248,16 @@ export default function TeamDashboard(props:{
           </View>
 
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
-            <Heading level={6}>{(officialFilter === 'intra' && teamId === homeUniversityId) ? (i18n.language?.startsWith('ja') ? '紅白戦統計' : 'Intra-Squad Stats') : (t('dashboard.vsOpponents') || 'Vs Teams')}</Heading>
+            <Heading level={6}>{(officialFilter === 'intra' && teamId === homeUniversityId) ? t('dashboard.intraSquadStats') : t('dashboard.vsTeams')}</Heading>
             {(officialFilter === 'intra' && teamId === homeUniversityId) ? (
               <div style={{ padding: 10 }}>
-                <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>{i18n.language?.startsWith('ja') ? '部内戦は全員が同じチームなので、対戦相手別の統計は表示されません。全体の統計やPlayer Contributionを確認してください。' : 'Intra-squad matches do not show opponent stats since all players are on the same team. Please see overall stats or Player Contribution.'}</p>
+                <p style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>{t('dashboard.intraSquadNote')}</p>
               </div>
             ) : (
               <Table variation="bordered" highlightOnHover>
                 <TableHead>
                   <TableRow>
-                    <TableCell as="th">{t('dashboard.opponent') || 'Opponent'}</TableCell>
+                    <TableCell as="th">{t('dashboard.opponent')}</TableCell>
                     <TableCell as="th">{t('dashboard.bouts')}</TableCell>
                     <TableCell as="th">{t('dashboard.wins')}</TableCell>
                     <TableCell as="th">{t('dashboard.losses')}</TableCell>
@@ -269,7 +269,7 @@ export default function TeamDashboard(props:{
                 <TableBody>
                   {(stat.vsTop as any).map(([oppId, v]:[string, any])=> (
                     <TableRow key={oppId}>
-                      <TableCell>{universities[oppId] || oppId || '-'}</TableCell>
+                      <TableCell>{universities[oppId] || oppId}</TableCell>
                       <TableCell>{v.bouts}</TableCell>
                       <TableCell>{v.wins}</TableCell>
                       <TableCell>{v.losses}</TableCell>
@@ -306,15 +306,15 @@ export default function TeamDashboard(props:{
 
           {/* Match-level W/L/D and tournament ranking */}
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
-            <Heading level={6}>{t('dashboard.matchSummary') || 'Match Results'}</Heading>
+            <Heading level={6}>{t('dashboard.matchSummary')}</Heading>
             <Table variation="bordered" highlightOnHover>
               <TableHead>
                 <TableRow>
-                  <TableCell as="th">{t('dashboard.tournament')||'Tournament'}</TableCell>
-                  <TableCell as="th">{t('dashboard.teamWins')||'Team Wins'}</TableCell>
-                  <TableCell as="th">{t('dashboard.oppWins')||'Opp Wins'}</TableCell>
-                  <TableCell as="th">{t('dashboard.draws')||'Draws'}</TableCell>
-                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '結果' : 'Result'}</TableCell>
+                  <TableCell as="th">{t('dashboard.tournament')}</TableCell>
+                  <TableCell as="th">{t('dashboard.teamWins')}</TableCell>
+                  <TableCell as="th">{t('dashboard.oppWins')}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')}</TableCell>
+                  <TableCell as="th">{t('dashboard.matchResult')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -332,17 +332,17 @@ export default function TeamDashboard(props:{
           </View>
 
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
-            <Heading level={6}>{t('dashboard.tournamentRanking') || 'Tournament Ranking'}</Heading>
+            <Heading level={6}>{t('dashboard.tournamentRanking')}</Heading>
             <Table variation="bordered" highlightOnHover>
               <TableHead>
                 <TableRow>
                   <TableCell as="th">#</TableCell>
-                  <TableCell as="th">{t('dashboard.tournament')||'Tournament'}</TableCell>
-                  <TableCell as="th">{t('dashboard.matches')||'Matches'}</TableCell>
-                  <TableCell as="th">{t('dashboard.wins')||'Wins'}</TableCell>
-                  <TableCell as="th">{t('dashboard.losses')||'Losses'}</TableCell>
-                  <TableCell as="th">{t('dashboard.draws')||'Draws'}</TableCell>
-                  <TableCell as="th">{t('dashboard.winRate')||'Win %'}</TableCell>
+                  <TableCell as="th">{t('dashboard.tournament')}</TableCell>
+                  <TableCell as="th">{t('dashboard.matches')}</TableCell>
+                  <TableCell as="th">{t('dashboard.wins')}</TableCell>
+                  <TableCell as="th">{t('dashboard.losses')}</TableCell>
+                  <TableCell as="th">{t('dashboard.draws')}</TableCell>
+                  <TableCell as="th">{t('dashboard.winRate')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -363,13 +363,13 @@ export default function TeamDashboard(props:{
 
           {/* Player contribution list */}
           <View style={{gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10}}>
-            <Heading level={6}>{t('dashboard.playerContribution')||'Player Contribution'}</Heading>
+            <Heading level={6}>{t('dashboard.playerContribution')}</Heading>
             <Table variation="bordered" highlightOnHover>
               <TableHead>
                 <TableRow>
-                  <TableCell as="th">{t('dashboard.player')||'Player'}</TableCell>
-                  <TableCell as="th">{t('dashboard.pointsFor')||'PF'}</TableCell>
-                  <TableCell as="th">{t('dashboard.pointsAgainst')||'PA'}</TableCell>
+                  <TableCell as="th">{t('dashboard.player')}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsFor')}</TableCell>
+                  <TableCell as="th">{t('dashboard.pointsAgainst')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>

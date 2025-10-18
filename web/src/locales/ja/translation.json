@@ -215,6 +215,11 @@
     "dashboard":  {
                       "title":  "ダッシュボード",
                       "selectPlayer":  "選手",
+                      "searchPlayer":  "選手名検索",
+                      "searchPlayerPlaceholder":  "選手名、大学名、学年で検索...",
+                      "granularity":  "分析粒度",
+                      "granularityCoarse":  "粗い（面・小手・胴）",
+                      "granularityDetailed":  "詳細（飛び込み面等）",
                       "stats":  "統計",
                       "bouts":  "対戦数",
                       "wins":  "勝ち",
@@ -229,6 +234,9 @@
                       "pieFor":  "取得技の分布",
                       "pieAgainst":  "被取得技の分布",
                       "vsOpponents":  "対戦相手別",
+                      "vsTeams":  "対戦団体別",
+                      "intraSquadStats":  "紅白戦統計",
+                      "intraSquadNote":  "部内戦は全員が同じチームなので、対戦相手別の統計は表示されません。全体の統計やPlayer Contributionを確認してください。",
                       "opponent":  "相手",
                       "noData":  "選手を選択すると統計が表示されます",
                       "from":  "開始日",
@@ -241,6 +249,7 @@
                       "slowest":  "最遅",
                       "pointsPerBout":  "平均本数/試合",
                       "diff":  "本数差",
+                      "matchResult":  "結果",
                       "teamTitle":  "団体ダッシュボード",
                       "selectTeam":  "団体",
                       "matchSummary":  "試合結果（団体）",
@@ -256,8 +265,13 @@
                     "all":  "すべて",
                     "official":  "公式戦のみ",
                     "practice":  "練習試合のみ",
-                    "intra":  "部内戦のみ"
+                    "intra":  "部内戦のみ",
+                    "gender":  "性別"
                 },
+    "gender":  {
+                   "MALE":  "男子",
+                   "FEMALE":  "女子"
+               },
     "export":  {
                    "print":  "印刷",
                    "players":  "選手貢献をCSV出力",
