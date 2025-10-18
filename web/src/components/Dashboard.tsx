@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex, RadioGroupField, Radio } from '@aws-amplify/ui-react'
+import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex, RadioGroupField, Radio, TextAreaField } from '@aws-amplify/ui-react'
 import AIPanel from './AIPanel'
 
 type Match = { id: string; heldOn: string; bouts?: { items: Bout[] } }
@@ -34,6 +34,7 @@ export default function Dashboard(props:{
   const [aiPayload, setAiPayload] = useState<any|null>(null)
   const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
   const [universities, setUniversities] = useState<Record<string, string>>({})
+  const [analysisModal, setAnalysisModal] = useState<{ open: boolean; category: string; content: string; importance: string; tags: string; periodStart: string; periodEnd: string }>({ open: false, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: '', periodEnd: '' })
 
   // Fetch players with extended info (gender, university, grade)
   useEffect(()=>{
@@ -190,6 +191,37 @@ export default function Dashboard(props:{
     }
   }
 
+  const createPlayerAnalysisMutation = `mutation CreatePlayerAnalysis($input: CreatePlayerAnalysisInput!) {
+    createPlayerAnalysis(input:$input){
+      id playerId category content importance tags periodStart periodEnd recordedAt
+    }
+  }`
+
+  async function savePlayerAnalysis(){
+    const { category, content, importance, tags, periodStart, periodEnd } = analysisModal
+    if(!playerId){ alert(t('dashboard.noData') || 'Please select a player'); return }
+    if(!content.trim()){ alert(t('errors.analysisContentRequired') || 'Content is required'); return }
+    if(!ai){ alert(t('errors.notSignedIn') || 'Not signed in'); return }
+    try{
+      const token = await ai.getToken(); if(!token) return
+      const tagsArray = tags.trim() ? tags.split(',').map(t=> t.trim()).filter(Boolean) : []
+      const input:any = {
+        playerId,
+        category,
+        content: content.trim(),
+        importance,
+        tags: tagsArray.length > 0 ? tagsArray : null,
+        periodStart: periodStart || null,
+        periodEnd: periodEnd || null,
+        recordedAt: new Date().toISOString()
+      }
+      const r = await fetch(ai.apiUrl,{method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query:createPlayerAnalysisMutation, variables:{ input } })});
+      const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors));
+      setAnalysisModal({ open: false, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: '', periodEnd: '' })
+      alert(t('notices.saved'))
+    }catch(e:any){ alert(String(e?.message ?? e)) }
+  }
+
   function PieChart({items, size=160}:{ items: [string, number][], size?:number }){
     const total = items.reduce((s, [,v])=> s+v, 0)
     if(total<=0) return <div>-</div>
@@ -321,9 +353,72 @@ export default function Dashboard(props:{
           </Table>
         </View>
         {ai && (
-          <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end' }}>
-            <Button variation="primary" onClick={()=> {
+          <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end', gap:'0.5rem' }}>
+            <Button onClick={()=> setAnalysisModal({ open: true, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '', periodStart: from, periodEnd: to })}>
+              {t('analysis.playerAnalysis')}
+            </Button>
+            <Button variation="primary" onClick={async ()=> {
               if(!stat || !playerId) return
+
+              // Fetch qualitative data
+              let boutAnalyses: any[] = []
+              let playerAnalyses: any[] = []
+
+              try {
+                const token = await ai.getToken()
+                if(token){
+                  // Collect bout IDs from filtered matches
+                  const boutIds: string[] = []
+                  const filtered = matches.filter(m=>{
+                    if(from && m.heldOn < from) return false
+                    if(to && m.heldOn > to) return false
+                    if(officialFilter==='official' && (m as any).isOfficial === false) return false
+                    if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+                    if(officialFilter==='intra' && (!homeUniversityId || (m as any).ourUniversityId!==homeUniversityId || (m as any).opponentUniversityId!==homeUniversityId)) return false
+                    if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+                    if(tournamentFilter && !(m as any).tournament) return false
+                    return true
+                  })
+                  for(const m of filtered){
+                    for(const b of (m.bouts?.items ?? [])){
+                      if(b.ourPlayerId===playerId || b.opponentPlayerId===playerId){
+                        boutIds.push(b.id)
+                      }
+                    }
+                  }
+
+                  // Fetch bout analyses for these bouts
+                  for(const boutId of boutIds){
+                    try{
+                      const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId category content importance tags recordedAt } } }`
+                      const r = await fetch(ai.apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: q, variables:{ boutId } }) })
+                      const j:any = await r.json()
+                      if(j.data?.listBoutAnalysisByBout?.items){
+                        boutAnalyses.push(...j.data.listBoutAnalysisByBout.items)
+                      }
+                    }catch{}
+                  }
+
+                  // Fetch player analyses
+                  try{
+                    const q = `query ListPlayerAnalysisByPlayer($playerId:ID!){ listPlayerAnalysisByPlayer(playerId:$playerId){ items{ id playerId category content importance tags periodStart periodEnd recordedAt } } }`
+                    const r = await fetch(ai.apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: q, variables:{ playerId } }) })
+                    const j:any = await r.json()
+                    if(j.data?.listPlayerAnalysisByPlayer?.items){
+                      playerAnalyses = j.data.listPlayerAnalysisByPlayer.items
+                      // Filter by date range if specified
+                      if(from || to){
+                        playerAnalyses = playerAnalyses.filter((a:any)=>{
+                          if(from && a.periodEnd && a.periodEnd < from) return false
+                          if(to && a.periodStart && a.periodStart > to) return false
+                          return true
+                        })
+                      }
+                    }
+                  }catch{}
+                }
+              }catch{}
+
               const payload = {
                 version: 'v1', mode: 'personal', locale: (navigator?.language||'ja'),
                 filters: { from, to, type: officialFilter, tournamentQuery: tournamentFilter||'' },
@@ -333,6 +428,10 @@ export default function Dashboard(props:{
                 topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
                 topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
                 vsOpponents: (stat.vsTop||[]).map(([oppId, v]: any)=> ({ opponentId: oppId, name: players[oppId]||oppId, ...v })),
+                qualitativeData: {
+                  boutAnalyses: boutAnalyses.map((a:any)=> ({ boutId: a.boutId, category: a.category, content: a.content, importance: a.importance, tags: a.tags, recordedAt: a.recordedAt })),
+                  playerAnalyses: playerAnalyses.map((a:any)=> ({ category: a.category, content: a.content, importance: a.importance, tags: a.tags, periodStart: a.periodStart, periodEnd: a.periodEnd, recordedAt: a.recordedAt }))
+                },
                 notes: { dataSource: 'client-aggregated' }
               }
               setAiPayload(payload); setAiOpen(true)
@@ -345,6 +444,39 @@ export default function Dashboard(props:{
       )}
       {ai && (
         <AIPanel open={aiOpen} onClose={()=> setAiOpen(false)} apiUrl={ai.apiUrl} getToken={ai.getToken} payload={aiPayload} />
+      )}
+      {analysisModal.open && (
+        <div style={{ position:'fixed', top:0, left:0, width:'100vw', height:'100vh', background:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center' }} onClick={()=> setAnalysisModal({...analysisModal, open:false})}>
+          <div style={{ background:'#fff', borderRadius:8, padding:20, minWidth:500, maxWidth:'90vw', maxHeight:'90vh', overflowY:'auto' }} onClick={e=> e.stopPropagation()}>
+            <Heading level={5}>{t('analysis.playerAnalysis')}</Heading>
+            <View marginTop="1rem">
+              <SelectField label={t('analysis.category')} value={analysisModal.category} onChange={e=> setAnalysisModal({...analysisModal, category: e.target.value})} size="small">
+                <option value="STRENGTH">{t('analysis.categories.STRENGTH')}</option>
+                <option value="WEAKNESS">{t('analysis.categories.WEAKNESS')}</option>
+                <option value="TACTICAL">{t('analysis.categories.TACTICAL')}</option>
+                <option value="MENTAL">{t('analysis.categories.MENTAL')}</option>
+                <option value="TECHNICAL">{t('analysis.categories.TECHNICAL')}</option>
+                <option value="PHYSICAL">{t('analysis.categories.PHYSICAL')}</option>
+                <option value="OTHER">{t('analysis.categories.OTHER')}</option>
+              </SelectField>
+              <SelectField label={t('analysis.importance')} value={analysisModal.importance} onChange={e=> setAnalysisModal({...analysisModal, importance: e.target.value})} size="small" marginTop="0.5rem">
+                <option value="HIGH">{t('analysis.importance_levels.HIGH')}</option>
+                <option value="MEDIUM">{t('analysis.importance_levels.MEDIUM')}</option>
+                <option value="LOW">{t('analysis.importance_levels.LOW')}</option>
+              </SelectField>
+              <TextAreaField label={t('analysis.content')} value={analysisModal.content} onChange={e=> setAnalysisModal({...analysisModal, content: e.target.value})} rows={6} marginTop="0.5rem" />
+              <TextField label={t('analysis.tags')} value={analysisModal.tags} onChange={e=> setAnalysisModal({...analysisModal, tags: e.target.value})} marginTop="0.5rem" />
+              <Flex gap="0.5rem" marginTop="0.5rem">
+                <TextField label={t('analysis.from')} type="date" value={analysisModal.periodStart} onChange={e=> setAnalysisModal({...analysisModal, periodStart: e.target.value})} />
+                <TextField label={t('analysis.to')} type="date" value={analysisModal.periodEnd} onChange={e=> setAnalysisModal({...analysisModal, periodEnd: e.target.value})} />
+              </Flex>
+              <Flex gap="0.5rem" marginTop="1rem" justifyContent="flex-end">
+                <Button onClick={()=> setAnalysisModal({...analysisModal, open:false})}>{t('action.cancel')}</Button>
+                <Button variation="primary" onClick={savePlayerAnalysis}>{t('action.add')}</Button>
+              </Flex>
+            </View>
+          </div>
+        </div>
       )}
     </View>
   )
