@@ -86,7 +86,15 @@ export default function NewEntryMode(props: {
     for(const b of bouts){ init[b.id] = rows[b.id] ?? { left1:null, left2:null, right1:null, right2:null, leftFouls:0, rightFouls:0 } }
     setRows(init)
     const m = matches.find(m=> m.id===matchId)
-    if(m){ setTournament(m.tournament ?? ''); setHeldOn(m.heldOn ?? ''); setIsOfficial((m as any).isOfficial ?? true); setOurUniversityId((m as any).ourUniversityId ?? ''); setOpponentUniversityId((m as any).opponentUniversityId ?? '') }
+    if(m){
+      setTournament(m.tournament ?? '')
+      setHeldOn(m.heldOn ?? '')
+      setIsOfficial((m as any).isOfficial ?? true)
+      setOurUniversityId((m as any).ourUniversityId ?? '')
+      setOpponentUniversityId((m as any).opponentUniversityId ?? '')
+      setVideoUrl((m as any).videoUrl ?? '')
+      setVideoPlaylist((m as any).videoPlaylist ?? '')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bouts.map(b=> b.id).join(','), matchId])
 

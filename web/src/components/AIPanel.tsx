@@ -68,7 +68,7 @@ export default function AIPanel({ open, onClose, apiUrl, getToken, payload }: AI
           </Flex>
           <TextAreaField label="要約" value={summary} isReadOnly rows={14} placeholder="ここにAIの要約が表示されます" />
           <Flex alignItems="flex-end" gap={8}>
-            <TextField label="要約への質問" value={question} onChange={e=> setQuestion(e.target.value)} placeholder="例: 出鼻小手の失点対策は？" width="100%" />
+            <TextField label="要約への質問" value={question} onChange={e=> setQuestion(e.target.value)} placeholder="例: この選手に対し有効な対策は？" width="100%" />
             <Button isDisabled={loading || !question} onClick={runAsk}>質問する</Button>
           </Flex>
         </View>
