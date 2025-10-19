@@ -1,10 +1,13 @@
 {
   "permissions": {
     "allow": [
+      "Bash(dir /s /b C:ukproject)",
+      "Bash(findstr /v \"node_modules .git\")",
+      "Bash(findstr /r \"^.*\\[^\\]*$\")",
+      "Bash(findstr /r \"\\.(ts|tsx|mjs|json)$\")",
+      "Bash(npx tsc --noEmit)",
       "Bash(npm run typecheck)",
-      "Bash(npx tsc:*)",
-      "Bash(tree:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run build)"
     ],
     "deny": [],
     "ask": []

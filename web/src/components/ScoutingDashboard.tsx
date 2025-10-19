@@ -1,0 +1,339 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import AIPanel from './AIPanel'
+
+type Match = { id: string; heldOn: string; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
+type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
+type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
+
+type Master = { code: string; nameJa?: string; nameEn?: string }
+type PlayerEx = { name: string; gender?: string|null; universityId?: string|null; grade?: number|null }
+
+export default function ScoutingDashboard(props:{
+  matches: Match[]
+  players: Record<string,string>
+  masters: { targets: Master[]; methods: Master[] }
+  labelJa: { target: Record<string,string>, method: Record<string,string> }
+  homeUniversityId?: string
+  ai?: { apiUrl: string; getToken: ()=>Promise<string|null> }
+}){
+  const { t, i18n } = useTranslation()
+  const { matches, players, labelJa, homeUniversityId } = props
+  const ai = props.ai
+  const [playerId, setPlayerId] = useState<string>('')
+  const [from, setFrom] = useState<string>('')
+  const [to, setTo] = useState<string>('')
+  const [tournamentFilter, setTournamentFilter] = useState<string>('')
+  const [topN, setTopN] = useState<number>(5)
+  const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'>('all')
+  const [playerSearch, setPlayerSearch] = useState<string>('')
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiPayload, setAiPayload] = useState<any|null>(null)
+  const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
+  const [universities, setUniversities] = useState<Record<string, string>>({})
+
+  // Fetch players with extended info (gender, university, grade)
+  useEffect(()=>{
+    async function fetchPlayersEx(){
+      try{
+        const token = await ai?.getToken(); if(!token || !ai) return
+        const q = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name gender universityId grade } nextToken } }`
+        let nextToken: string | null = null; const map: Record<string, PlayerEx> = {}
+        do{
+          const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token as string }, body: JSON.stringify({ query: q, variables:{ limit:200, nextToken } }) })
+          const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+          for(const p of j.data.listPlayers.items){ map[p.id] = { name: p.name, gender: p.gender, universityId: p.universityId, grade: p.grade } }
+          nextToken = j.data.listPlayers.nextToken
+        } while(nextToken)
+        setPlayersEx(map)
+      }catch{}
+    }
+    fetchPlayersEx()
+  }, [])
+
+  // Fetch universities
+  useEffect(()=>{
+    async function fetchUniversities(){
+      try{
+        const token = await ai?.getToken(); if(!token || !ai) return
+        const q = `query ListUniversities($limit:Int,$nextToken:String){ listUniversities(limit:$limit,nextToken:$nextToken){ items{ id name shortName } nextToken } }`
+        let nextToken: string | null = null; const map: Record<string, string> = {}
+        do{
+          const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token as string }, body: JSON.stringify({ query: q, variables:{ limit:200, nextToken } }) })
+          const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+          for(const u of j.data.listUniversities.items){ map[u.id] = u.shortName || u.name || u.id }
+          nextToken = j.data.listUniversities.nextToken
+        } while(nextToken)
+        setUniversities(map)
+      }catch{}
+    }
+    fetchUniversities()
+  }, [])
+
+  // Filter to opponent players only (not from home university)
+  const opponentPlayerList = useMemo(() => {
+    let list = Object.entries(players).map(([id, name]) => {
+      const info = playersEx[id]
+      const uniName = info?.universityId ? universities[info.universityId] || '' : ''
+      const gradeText = info?.grade ? `${info.grade}年` : ''
+      const displayName = [name, uniName, gradeText].filter(Boolean).join('　')
+      return { id, name, displayName, info }
+    })
+
+    // Filter: Only opponent players (not from home university)
+    if(homeUniversityId){
+      list = list.filter(p => p.info?.universityId !== homeUniversityId)
+    }
+
+    // Search filter
+    if(playerSearch.trim()){
+      const query = playerSearch.trim().toLowerCase()
+      list = list.filter(p=> p.displayName.toLowerCase().includes(query))
+    }
+
+    return list.sort((a,b)=> a.name.localeCompare(b.name,'ja'))
+  }, [players, playersEx, universities, homeUniversityId, playerSearch])
+
+  const stat = useMemo(()=>{
+    if(!playerId) return null
+    const filtered = matches.filter(m=>{
+      if(from && m.heldOn < from) return false
+      if(to && m.heldOn > to) return false
+      if(officialFilter==='official' && (m as any).isOfficial === false) return false
+      if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+      if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+      if(tournamentFilter && !(m as any).tournament) return false
+      return true
+    })
+    const combinedFor: Record<string, number> = {}
+    const combinedAgainst: Record<string, number> = {}
+    let wins=0, losses=0, draws=0, bouts=0, pf=0, pa=0
+    const times:number[]=[]
+
+    const buildTechniqueKey = (target: string, methods: string[]) => {
+      const mm = (methods||[]).slice().sort()
+      return `${target||''}:${mm.join('+')}`
+    }
+
+    for(const m of filtered){
+      for(const b of (m.bouts?.items ?? [])){
+        // Check if this player is involved
+        const isLeft = b.ourPlayerId===playerId
+        const isRight = b.opponentPlayerId===playerId
+        if(!isLeft && !isRight) continue
+        bouts++
+        if(b.winType==='DRAW'){ draws++ }
+        else if(b.winnerPlayerId){
+          if(b.winnerPlayerId===playerId){ wins++ } else { losses++ }
+        }
+        for(const p of (b.points?.items ?? [])){
+          if(p.scorerPlayerId===playerId){
+            pf++; if(typeof p.tSec==='number') times.push(p.tSec)
+            if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
+            const key = buildTechniqueKey(p.target||'', p.methods||[])
+            combinedFor[key] = (combinedFor[key]||0)+1
+          } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
+            pa++
+            if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
+            else { const key = buildTechniqueKey(p.target||'', p.methods||[]); combinedAgainst[key] = (combinedAgainst[key]||0)+1 }
+          }
+        }
+      }
+    }
+    const avgTime = times.length ? (times.reduce((a,b)=>a+b,0)/times.length) : null
+    const winRate = bouts ? wins/bouts : 0
+    const fastest = times.length ? Math.min(...times) : null
+    const slowest = times.length ? Math.max(...times) : null
+    const ppg = bouts ? pf / bouts : 0
+    const diff = pf - pa
+    const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, topN)
+    const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
+    return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst }
+  }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter])
+
+  function labelTarget(code:string){ return labelJa.target[code] ?? code }
+  function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
+  function labelTechniqueCombined(key:string){
+    if(key==='HANSOKU') return t('winType.HANSOKU')
+    const [target, mstr] = key.split(':')
+    const ml = (mstr? mstr.split('+') : []).map(labelMethod)
+    const base = ml.join('')
+    return `${base}${labelTarget(target)}`
+  }
+
+  function PieChart({items, size=160}:{ items: [string, number][], size?:number }){
+    const total = items.reduce((s, [,v])=> s+v, 0)
+    if(total<=0) return <div>-</div>
+    const r = size/2, cx=r, cy=r
+    const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
+
+    const getColorIndex = (label: string) => {
+      let hash = 0
+      for(let i=0; i<label.length; i++){
+        hash = ((hash << 5) - hash) + label.charCodeAt(i)
+        hash = hash & hash
+      }
+      return Math.abs(hash) % palette.length
+    }
+
+    if(items.length === 1){
+      const [label, v] = items[0]
+      const pct = ((v/total)*100).toFixed(1)
+      const color = palette[getColorIndex(label)]
+      return (
+        <div>
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+            <circle cx={cx} cy={cy} r={r} fill={color} stroke="#fff" strokeWidth={1} />
+          </svg>
+          <div style={{ marginTop:8 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
+              <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
+              <span>{label} ({v}本, {pct}%)</span>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    let acc = 0
+    const paths = items.map(([label,v],i)=>{
+      const a0 = (acc/total)*2*Math.PI - Math.PI/2; acc += v; const a1 = (i === items.length - 1) ? (2*Math.PI - Math.PI/2) : ((acc/total)*2*Math.PI - Math.PI/2)
+      const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
+      const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
+      const large = (a1-a0) > Math.PI ? 1 : 0
+      const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
+      const color = palette[getColorIndex(label)]
+      return (<path key={i} d={d} fill={color} stroke="#fff" strokeWidth={1} />)
+    })
+    const legend = items.map(([label,v],i)=>{
+      const pct = ((v/total)*100).toFixed(1)
+      const color = palette[getColorIndex(label)]
+      return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
+        <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
+        <span>{label} ({v}本, {pct}%)</span>
+      </div>)
+    })
+    return (
+      <div>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{paths}</svg>
+        <div style={{ marginTop:8 }}>{legend}</div>
+      </div>
+    )
+  }
+
+  return (
+    <View>
+      <Heading level={4}>{i18n.language?.startsWith('ja') ? '対戦相手分析（スカウティング）' : 'Opponent Scouting'}</Heading>
+      <View marginTop="0.5rem">
+        <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
+          <TextField
+            label={i18n.language?.startsWith('ja') ? '相手選手検索' : 'Search Opponent Player'}
+            placeholder={i18n.language?.startsWith('ja') ? '選手名、大学名で検索' : 'Search by name, university'}
+            value={playerSearch}
+            onChange={e=> setPlayerSearch(e.target.value)}
+            width="20rem"
+          />
+          <SelectField
+            label={i18n.language?.startsWith('ja') ? '相手選手選択' : 'Select Opponent'}
+            value={playerId}
+            onChange={e=> setPlayerId(e.target.value)}
+            size="small"
+            width="22rem"
+          >
+            <option value="">--</option>
+            {opponentPlayerList.map(p => (<option key={p.id} value={p.id}>{p.displayName}</option>))}
+          </SelectField>
+          <TextField label={t('dashboard.from')} type="date" value={from} onChange={e=> setFrom(e.target.value)} width="11rem" />
+          <TextField label={t('dashboard.to')} type="date" value={to} onChange={e=> setTo(e.target.value)} width="11rem" />
+          <SelectField label={t('filters.type')} value={officialFilter} onChange={e=> setOfficialFilter(e.target.value as any)} size="small" width="12rem">
+            <option value="all">{t('filters.all')}</option>
+            <option value="official">{t('filters.official')}</option>
+            <option value="practice">{t('filters.practice')}</option>
+          </SelectField>
+          <TextField label={t('dashboard.tournament')} placeholder={t('dashboard.tournamentPh')} value={tournamentFilter} onChange={e=> setTournamentFilter(e.target.value)} width="16rem" />
+          <SelectField label={t('dashboard.topN')} value={String(topN)} onChange={e=> setTopN(Number(e.target.value))} size="small" width="10rem">
+            {[5,10,15].map(n=> (<option key={n} value={n}>{n}</option>))}
+          </SelectField>
+          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all'); setPlayerSearch(''); setPlayerId('') }}>
+            {t('dashboard.clear')}
+          </Button>
+        </Flex>
+      </View>
+
+      {!playerId && (
+        <View marginTop="0.75rem" padding="1rem" style={{ background: '#f9f9f9', borderRadius: 8 }}>
+          <div style={{ textAlign: 'center', color: '#666', fontSize: 14 }}>
+            {i18n.language?.startsWith('ja')
+              ? '対戦相手の選手を選択してください。ホーム大学以外の選手のみ表示されます。'
+              : 'Select an opponent player to analyze. Only players from other universities are shown.'}
+          </div>
+        </View>
+      )}
+
+      {playerId && stat && (
+        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+            <Heading level={6}>{t('dashboard.stats')}</Heading>
+            <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : t('filters.practice')}</b></div>
+            <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>
+            <div>{t('dashboard.wins')}: <b>{stat.wins}</b> / {t('dashboard.losses')}: <b>{stat.losses}</b> / {t('dashboard.draws')}: <b>{stat.draws}</b></div>
+            <div>{t('dashboard.winRate')}: <b>{(stat.winRate*100).toFixed(1)}%</b></div>
+            <div>{t('dashboard.pointsFor')}: <b>{stat.pf}</b> / {t('dashboard.pointsAgainst')}: <b>{stat.pa}</b></div>
+            <div>{t('dashboard.avgTimeToScore')}: <b>{stat.avgTime==null?'-':stat.avgTime.toFixed(1)+'s'}</b></div>
+            <div>{t('dashboard.fastest')}: <b>{stat.fastest==null?'-':stat.fastest+'s'}</b> / {t('dashboard.slowest')}: <b>{stat.slowest==null?'-':stat.slowest+'s'}</b></div>
+            <div>{t('dashboard.pointsPerBout')}: <b>{stat.ppg.toFixed(2)}</b> / {t('dashboard.diff')}: <b>{stat.diff>0?'+':''}{stat.diff}</b></div>
+          </View>
+
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+            <Heading level={6}>{t('dashboard.pieFor')}</Heading>
+            <PieChart items={stat.topCombinedFor.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
+          </View>
+
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+            <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
+            <PieChart items={stat.topCombinedAgainst.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
+          </View>
+
+          {ai && (
+            <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end', gap:'0.5rem' }}>
+              <Button variation="primary" onClick={async ()=> {
+                if(!stat || !playerId) return
+
+                const playerInfo = playersEx[playerId]
+                const universityId = playerInfo?.universityId || null
+                const universityName = universityId ? (universities[universityId] || null) : null
+                const payload = {
+                  version: 'v1',
+                  mode: 'scouting', // ← スカウティング専用モード
+                  locale: (navigator?.language||'ja'),
+                  filters: { from, to, type: officialFilter, tournamentQuery: tournamentFilter||'' },
+                  subject: {
+                    playerId,
+                    displayName: players[playerId]||playerId,
+                    universityId,
+                    universityName,
+                    gender: playerInfo?.gender || null,
+                    grade: playerInfo?.grade || null
+                  },
+                  sampleSizes: { matches: (matches||[]).length, bouts: stat.bouts },
+                  stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, ppg: stat.ppg, diff: stat.diff, winRate: stat.winRate, avgTimeToScoreSec: stat.avgTime, fastestSec: stat.fastest, slowestSec: stat.slowest },
+                  topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                  topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                  notes: { dataSource: 'client-aggregated', context: 'opponent-scouting' }
+                }
+                setAiPayload(payload); setAiOpen(true)
+              }}>
+                {i18n.language?.startsWith('ja') ? 'スカウティングレポート生成' : 'Generate Scouting Report'}
+              </Button>
+            </div>
+          )}
+        </View>
+      )}
+
+      {ai && (
+        <AIPanel open={aiOpen} onClose={()=> setAiOpen(false)} apiUrl={ai.apiUrl} getToken={ai.getToken} payload={aiPayload} />
+      )}
+    </View>
+  )
+}

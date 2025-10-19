@@ -76,6 +76,53 @@ Masters are stored in JSON under `seed/`. To insert them into your API:
 2. Push backend (auth + data). Ensure Cognito groups exist: `ADMINS`, `COACHES`, `ANALYSTS`, `VIEWERS`.
 3. Connect the repo to Amplify Hosting for CI/CD (frontend to be added).
 
+## AI Features (Amazon Bedrock)
+
+The app includes AI-powered analytics via the `aiCoach` Lambda function:
+
+### System Prompt Configuration
+
+System prompts are loaded with the following priority:
+1. **S3 Bucket** (recommended for long prompts)
+2. **Environment Variable** (for short prompts < 4KB)
+3. **Default Prompt** (fallback)
+
+### Quick Setup
+
+1. Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Configure AI settings in `.env`:
+   ```bash
+   # Option A: Use S3 (recommended)
+   AI_PROMPT_S3_BUCKET=kendo-ai-prompts-YOUR-ACCOUNT-ID
+   AI_PROMPT_S3_KEY=prompts/system-prompt.txt
+   AI_MODEL_ID=anthropic.claude-3-5-sonnet-20240620-v1:0
+   AI_BEDROCK_REGION=us-east-1
+
+   # Option B: Use environment variable (for short prompts)
+   AI_SYSTEM_PROMPT="Your custom prompt here..."
+   ```
+
+3. If using S3, create bucket and upload prompt:
+   ```bash
+   aws s3 mb s3://kendo-ai-prompts-YOUR-ACCOUNT-ID
+   aws s3 cp system-prompt.txt s3://kendo-ai-prompts-YOUR-ACCOUNT-ID/prompts/system-prompt.txt
+   ```
+
+4. Test the AI features:
+   ```bash
+   # Start sandbox
+   npx ampx sandbox
+
+   # In another terminal
+   node scripts/testAICoach.mjs
+   ```
+
+📚 **Full documentation**: See [docs/AI_SYSTEM_PROMPT_SETUP.md](docs/AI_SYSTEM_PROMPT_SETUP.md)
+
 ## Notes
 
 - The data model separates `Target` (MEN/KOTE/DO/TSUKI) from `Method` (e.g., SURIAGE/KAESHI…).

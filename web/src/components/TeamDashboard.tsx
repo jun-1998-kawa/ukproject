@@ -24,6 +24,7 @@ export default function TeamDashboard(props:{
   const [tournamentFilter, setTournamentFilter] = useState<string>('')
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
+  const [viewMode, setViewMode] = useState<'regular'|'intra'>('regular')
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPayload, setAiPayload] = useState<any|null>(null)
 
@@ -51,6 +52,8 @@ export default function TeamDashboard(props:{
       if(tournamentFilter && m.tournament && !m.tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
       if(tournamentFilter && !m.tournament) return false
       const involved = m.ourUniversityId===teamId || m.opponentUniversityId===teamId
+      // Exclude intra-squad matches (same university) from regular stats
+      if(officialFilter !== 'intra' && m.ourUniversityId === m.opponentUniversityId) return false
       return involved
     })
 
@@ -80,9 +83,42 @@ export default function TeamDashboard(props:{
     const diff = pf - pa
     const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
-    const vsTop = Object.entries(vsTeam).sort((a,b)=> b[1].bouts - a[1].bouts).slice(0,8)
+    // Exclude self (teamId) from vsTop to avoid showing intra-squad in opponent list
+    const vsTop = Object.entries(vsTeam).filter(([oppId])=> oppId !== teamId).sort((a,b)=> b[1].bouts - a[1].bouts).slice(0,8)
     return { wins, losses, draws, bouts, pf, pa, diff, topCombinedFor, topCombinedAgainst, vsTop }
   }, [matches, teamId, from, to, tournamentFilter, topN, officialFilter, homeUniversityId])
+
+  // Intra-squad stats (department matches only)
+  const intraStat = useMemo(()=>{
+    if(!teamId) return null
+    const filtered = matches.filter(m=>{
+      if(from && m.heldOn < from) return false
+      if(to && m.heldOn > to) return false
+      if(tournamentFilter && m.tournament && !m.tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+      if(tournamentFilter && !m.tournament) return false
+      // Only intra-squad matches (same university)
+      if(m.ourUniversityId !== m.opponentUniversityId) return false
+      const involved = m.ourUniversityId===teamId || m.opponentUniversityId===teamId
+      return involved
+    })
+
+    const combinedFor: Record<string, number> = {}
+    let bouts=0, totalPoints=0
+
+    for(const m of filtered){
+      for(const b of (m.bouts?.items ?? [])){
+        bouts++
+        for(const p of (b.points?.items ?? [])){
+          totalPoints++
+          if(p.judgement==='HANSOKU'){ combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1 }
+          else { const key=buildTechniqueKey(p.target||'', p.methods||[]); combinedFor[key]=(combinedFor[key]||0)+1 }
+        }
+      }
+    }
+
+    const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, topN)
+    return { bouts, totalPoints, topCombinedFor, matches: filtered.length }
+  }, [matches, teamId, from, to, tournamentFilter, topN])
 
   // Match-level W/L/D and tournament rankings
   const matchStats = useMemo(()=>{
@@ -96,6 +132,8 @@ export default function TeamDashboard(props:{
       if(officialFilter==='intra' && (!homeUniversityId || m.ourUniversityId!==homeUniversityId || m.opponentUniversityId!==homeUniversityId)) continue
       const involved = m.ourUniversityId===teamId || m.opponentUniversityId===teamId
       if(!involved) continue
+      // Exclude intra-squad matches from regular stats
+      if(officialFilter !== 'intra' && m.ourUniversityId === m.opponentUniversityId) continue
       if(tournamentFilter){
         const tn = (m.tournament||'').toLowerCase(); if(!tn.includes(tournamentFilter.toLowerCase())) continue
       }
@@ -170,19 +208,32 @@ export default function TeamDashboard(props:{
     const r = size/2, cx=r, cy=r
     let acc = 0
     const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
+
+    // Generate stable color index from label
+    const getColorIndex = (label: string) => {
+      let hash = 0
+      for(let i=0; i<label.length; i++){
+        hash = ((hash << 5) - hash) + label.charCodeAt(i)
+        hash = hash & hash // Convert to 32bit integer
+      }
+      return Math.abs(hash) % palette.length
+    }
+
     const paths = items.map(([label,v],i)=>{
       const a0 = (acc/total)*2*Math.PI - Math.PI/2; acc += v; const a1 = (i === items.length - 1) ? (2*Math.PI - Math.PI/2) : ((acc/total)*2*Math.PI - Math.PI/2)
       const x0 = cx + r*Math.cos(a0), y0 = cy + r*Math.sin(a0)
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
-      return (<path key={i} d={d} fill={palette[i%palette.length]} stroke="#fff" strokeWidth={1} />)
+      const color = palette[getColorIndex(label)]
+      return (<path key={i} d={d} fill={color} stroke="#fff" strokeWidth={1} />)
     })
     const legend = items.map(([label,v],i)=>{
       const pct = ((v/total)*100).toFixed(1)
+      const color = palette[getColorIndex(label)]
       return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
-        <div style={{ width:12, height:12, background: palette[i%palette.length], border:'1px solid #ccc', flexShrink:0 }}></div>
-        <span>{label} ({pct}%)</span>
+        <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
+        <span>{label} ({v}本, {pct}%)</span>
       </div>)
     })
     return (
@@ -197,6 +248,30 @@ export default function TeamDashboard(props:{
     <View>
       <Heading level={4}>{t('dashboard.teamTitle')}</Heading>
       <View marginTop="0.5rem">
+        <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end" marginBottom="1rem">
+          <Button
+            variation={viewMode === 'regular' ? 'primary' : undefined}
+            onClick={()=> setViewMode('regular')}
+            style={viewMode !== 'regular' ? {
+              border: '1px solid var(--amplify-colors-border-primary)',
+              background: 'transparent',
+              color: 'var(--amplify-colors-font-primary)'
+            } : undefined}
+          >
+            {i18n.language?.startsWith('ja') ? '対外試合' : 'External Matches'}
+          </Button>
+          <Button
+            variation={viewMode === 'intra' ? 'primary' : undefined}
+            onClick={()=> setViewMode('intra')}
+            style={viewMode !== 'intra' ? {
+              border: '1px solid var(--amplify-colors-border-primary)',
+              background: 'transparent',
+              color: 'var(--amplify-colors-font-primary)'
+            } : undefined}
+          >
+            {i18n.language?.startsWith('ja') ? '部内戦' : 'Intra-Squad'}
+          </Button>
+        </Flex>
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
           <SelectField label={t('dashboard.selectTeam')} value={teamId} onChange={e=> setTeamId(e.target.value)} size="small" width="18rem">
             <option value="">--</option>
@@ -228,7 +303,47 @@ export default function TeamDashboard(props:{
         <View marginTop="0.75rem" color="#666">{t('dashboard.noData')}</View>
       )}
 
-      {teamId && stat && (
+      {/* Intra-squad view */}
+      {teamId && viewMode === 'intra' && intraStat && (
+        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(200px,1fr))', gap:12}}>
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '部内戦統計' : 'Intra-Squad Stats'}</Heading>
+            <div>{i18n.language?.startsWith('ja') ? '試合数' : 'Matches'}: <b>{intraStat.matches}</b></div>
+            <div>{i18n.language?.startsWith('ja') ? '試合数（本数）' : 'Bouts'}: <b>{intraStat.bouts}</b></div>
+            <div>{i18n.language?.startsWith('ja') ? '総有効打突' : 'Total Points'}: <b>{intraStat.totalPoints}</b></div>
+          </View>
+
+          <View style={{border:'1px solid #eee', borderRadius:8, padding:10, gridColumn:'1 / -1'}}>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '取得技詳細（Top ' + topN + '）' : 'Techniques Detail (Top ' + topN + ')'}</Heading>
+            <Table variation="bordered" highlightOnHover>
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">#</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '技' : 'Technique'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '本数' : 'Count'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '割合' : 'Percentage'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {intraStat.topCombinedFor.map(([key, count], i)=> {
+                  const pct = intraStat.totalPoints > 0 ? ((count / intraStat.totalPoints) * 100).toFixed(1) : '0.0'
+                  return (
+                    <TableRow key={i}>
+                      <TableCell>{i+1}</TableCell>
+                      <TableCell>{labelTechniqueCombined(key)}</TableCell>
+                      <TableCell>{count}</TableCell>
+                      <TableCell>{pct}%</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </View>
+        </View>
+      )}
+
+      {/* Regular external matches view */}
+      {teamId && viewMode === 'regular' && stat && (
         <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.stats')}</Heading>
