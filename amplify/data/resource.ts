@@ -294,6 +294,8 @@ const schema = a.schema({
   BoutAnalysis: a.model({
     boutId: a.id().required(),
     bout: a.belongsTo("Bout","boutId"),
+    subjectPlayerId: a.id().required(), // Which player this analysis is about (ourPlayer or opponentPlayer)
+    subjectPlayer: a.belongsTo("Player","subjectPlayerId"),
     category: a.enum(["STRENGTH","WEAKNESS","TACTICAL","MENTAL","TECHNICAL","OTHER"]),
     content: a.string().required(),
     importance: a.enum(["HIGH","MEDIUM","LOW"]),
@@ -302,6 +304,7 @@ const schema = a.schema({
     recordedBy: a.string(),
   }).secondaryIndexes((idx)=>[
     idx("boutId").sortKeys(["recordedAt"]).queryField("listBoutAnalysisByBout"),
+    idx("subjectPlayerId").sortKeys(["recordedAt"]).queryField("listBoutAnalysisBySubject"),
   ]).authorization((allow)=>[
     allow.groups(["ADMINS","COACHES","ANALYSTS"]).to(["create","update","delete","read"]),
     allow.groups(["VIEWERS"]).to(["read"]),

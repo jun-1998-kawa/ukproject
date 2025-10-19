@@ -39,6 +39,7 @@ export default function Dashboard(props:{
   const [boutAnalyses, setBoutAnalyses] = useState<any[]>([])
   const [showAnalyses, setShowAnalyses] = useState(false)
   const [analysisFilter, setAnalysisFilter] = useState<{ category: string; importance: string; tag: string }>({ category: 'all', importance: 'all', tag: '' })
+  const [videoModal, setVideoModal] = useState<{ open: boolean; matchId?: string; boutId?: string; matchVideoUrl: string; matchVideoPlaylist: string; boutVideoUrl: string; boutVideoTimestamp: string }>({ open: false, matchVideoUrl: '', matchVideoPlaylist: '', boutVideoUrl: '', boutVideoTimestamp: '' })
 
   // Fetch players with extended info (gender, university, grade)
   useEffect(()=>{
@@ -118,7 +119,7 @@ export default function Dashboard(props:{
         const analyses: any[] = []
         for(const boutId of boutIds){
           try{
-            const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId category content importance tags recordedAt } } }`
+            const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId subjectPlayerId category content importance tags recordedAt } } }`
             const r = await fetch(ai.apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: q, variables:{ boutId } }) })
             const j:any = await r.json()
             if(j.data?.listBoutAnalysisByBout?.items){
@@ -133,13 +134,22 @@ export default function Dashboard(props:{
   }, [playerId, matches])
 
   const playerList = useMemo(() => {
-    let list = Object.entries(players).map(([id, name]) => {
+    // Merge players from both sources: props.players and playersEx
+    const allPlayerIds = new Set([...Object.keys(players), ...Object.keys(playersEx)])
+
+    let list = Array.from(allPlayerIds).map(id => {
+      const name = players[id] || playersEx[id]?.name || id  // Fallback to playersEx name, then ID
       const info = playersEx[id]
       const uniName = info?.universityId ? universities[info.universityId] || '' : ''
       const gradeText = info?.grade ? `${info.grade}年` : ''
       const displayName = [name, uniName, gradeText].filter(Boolean).join('　')
       return { id, name, displayName, info }
     })
+
+    // Home university filter - only show home university players
+    if(homeUniversityId){
+      list = list.filter(p=> p.info?.universityId === homeUniversityId)
+    }
 
     // Gender filter
     if(genderFilter !== 'all'){
@@ -153,7 +163,7 @@ export default function Dashboard(props:{
     }
 
     return list.sort((a,b)=> a.name.localeCompare(b.name,'ja'))
-  }, [players, playersEx, universities, genderFilter, playerSearch])
+  }, [players, playersEx, universities, genderFilter, playerSearch, homeUniversityId])
 
   // Persist filter in localStorage (share same key with App to keep consistent)
   useEffect(()=>{
@@ -231,6 +241,58 @@ export default function Dashboard(props:{
     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst, vsTop }
   }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter, homeUniversityId, granularity])
+
+  // Build match list with video links for the selected player
+  const matchList = useMemo(()=>{
+    if(!playerId) return []
+
+    const filtered = matches.filter(m=>{
+      if(from && m.heldOn < from) return false
+      if(to && m.heldOn > to) return false
+      if(officialFilter==='official' && (m as any).isOfficial === false) return false
+      if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+      if(officialFilter==='intra' && (!homeUniversityId || (m as any).ourUniversityId!==homeUniversityId || (m as any).opponentUniversityId!==homeUniversityId)) return false
+      if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+      if(tournamentFilter && !(m as any).tournament) return false
+      return true
+    })
+
+    const list: any[] = []
+    for(const m of filtered){
+      for(const b of (m.bouts?.items ?? [])){
+        if(b.ourPlayerId === playerId || b.opponentPlayerId === playerId){
+          const isOur = b.ourPlayerId === playerId
+          const oppId = isOur ? b.opponentPlayerId : b.ourPlayerId
+          const oppName = players[oppId] || playersEx[oppId]?.name || oppId
+          const oppInfo = playersEx[oppId]
+          const oppUni = oppInfo?.universityId ? universities[oppInfo.universityId] || '' : ''
+          const oppDisplay = oppUni ? `${oppName}（${oppUni}）` : oppName
+
+          let result = '-'
+          if(b.winType === 'DRAW') result = i18n.language?.startsWith('ja') ? '引き分け' : 'Draw'
+          else if(b.winnerPlayerId){
+            if(b.winnerPlayerId === playerId) result = i18n.language?.startsWith('ja') ? '勝ち' : 'Win'
+            else result = i18n.language?.startsWith('ja') ? '負け' : 'Loss'
+          }
+
+          list.push({
+            matchId: m.id,
+            boutId: b.id,
+            date: m.heldOn,
+            tournament: (m as any).tournament || '-',
+            opponent: oppDisplay,
+            result,
+            matchVideoUrl: (m as any).videoUrl || null,
+            matchVideoPlaylist: (m as any).videoPlaylist || null,
+            boutVideoUrl: (b as any).videoUrl || null,
+            boutVideoTimestamp: (b as any).videoTimestamp || null
+          })
+        }
+      }
+    }
+
+    return list.sort((a,b)=> b.date.localeCompare(a.date))
+  }, [matches, playerId, from, to, tournamentFilter, officialFilter, homeUniversityId, players, playersEx, universities, i18n.language])
 
   function labelTarget(code:string){ return labelJa.target[code] ?? code }
   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
@@ -530,7 +592,7 @@ export default function Dashboard(props:{
               </TableHead>
               <TableBody>
                 {stat.vsTop.map(([oppId, v])=> {
-                  const playerName = players[oppId] ?? oppId
+                  const playerName = players[oppId] || playersEx[oppId]?.name || oppId
                   const playerInfo = playersEx[oppId]
                   const uniName = playerInfo?.universityId ? (universities[playerInfo.universityId] || '') : ''
                   const displayName = uniName ? `${playerName}（${uniName}）` : playerName
@@ -549,6 +611,97 @@ export default function Dashboard(props:{
               </TableBody>
           </Table>
         </View>
+
+        {/* Match List with Video Links */}
+        <View style={{ gridColumn:'1 / -1', padding:'1rem', background:'white', borderRadius:'8px' }}>
+          <Heading level={5}>{i18n.language?.startsWith('ja') ? '試合一覧' : 'Match List'}</Heading>
+          <Table highlightOnHover variation="striped" size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell as="th">{i18n.language?.startsWith('ja') ? '日付' : 'Date'}</TableCell>
+                <TableCell as="th">{i18n.language?.startsWith('ja') ? '大会' : 'Tournament'}</TableCell>
+                <TableCell as="th">{i18n.language?.startsWith('ja') ? '対戦相手' : 'Opponent'}</TableCell>
+                <TableCell as="th">{i18n.language?.startsWith('ja') ? '結果' : 'Result'}</TableCell>
+                <TableCell as="th">{i18n.language?.startsWith('ja') ? '動画' : 'Video'}</TableCell>
+                <TableCell as="th">{i18n.language?.startsWith('ja') ? '編集' : 'Edit'}</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {matchList.map((m, idx)=> {
+                // Construct YouTube URL with timestamp if available
+                let videoUrl = m.boutVideoUrl || m.matchVideoUrl || m.matchVideoPlaylist
+                if(videoUrl && m.boutVideoTimestamp){
+                  // Add timestamp parameter
+                  const separator = videoUrl.includes('?') ? '&' : '?'
+                  videoUrl = `${videoUrl}${separator}t=${m.boutVideoTimestamp}`
+                }
+
+                return (
+                  <TableRow key={idx}>
+                    <TableCell>{m.date}</TableCell>
+                    <TableCell>{m.tournament}</TableCell>
+                    <TableCell>{m.opponent}</TableCell>
+                    <TableCell>
+                      <span style={{
+                        color: m.result.includes('勝') || m.result.includes('Win') ? 'green' :
+                               m.result.includes('負') || m.result.includes('Loss') ? 'red' : 'gray',
+                        fontWeight: 600
+                      }}>
+                        {m.result}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {videoUrl ? (
+                        <a
+                          href={videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            color: '#c00',
+                            textDecoration: 'none',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          ▶ YouTube
+                        </a>
+                      ) : (
+                        <span style={{ color: '#999' }}>-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="small"
+                        onClick={()=> {
+                          setVideoModal({
+                            open: true,
+                            matchId: m.matchId,
+                            boutId: m.boutId,
+                            matchVideoUrl: m.matchVideoUrl || '',
+                            matchVideoPlaylist: m.matchVideoPlaylist || '',
+                            boutVideoUrl: m.boutVideoUrl || '',
+                            boutVideoTimestamp: m.boutVideoTimestamp ? String(m.boutVideoTimestamp) : ''
+                          })
+                        }}
+                      >
+                        {i18n.language?.startsWith('ja') ? '編集' : 'Edit'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                )
+              })}
+              {matchList.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} style={{ textAlign: 'center', color: '#999' }}>
+                    {i18n.language?.startsWith('ja') ? '試合データがありません' : 'No matches found'}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </View>
+
         {ai && (
           <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end', gap:'0.5rem' }}>
             <Button onClick={()=> setShowAnalyses(!showAnalyses)}>
@@ -590,7 +743,7 @@ export default function Dashboard(props:{
                   // Fetch bout analyses for these bouts
                   for(const boutId of boutIds){
                     try{
-                      const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId category content importance tags recordedAt } } }`
+                      const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId subjectPlayerId category content importance tags recordedAt } } }`
                       const r = await fetch(ai.apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: q, variables:{ boutId } }) })
                       const j:any = await r.json()
                       if(j.data?.listBoutAnalysisByBout?.items){
@@ -637,9 +790,47 @@ export default function Dashboard(props:{
                 stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, ppg: stat.ppg, diff: stat.diff, winRate: stat.winRate, avgTimeToScoreSec: stat.avgTime, fastestSec: stat.fastest, slowestSec: stat.slowest },
                 topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
                 topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
-                vsOpponents: (stat.vsTop||[]).map(([oppId, v]: any)=> ({ opponentId: oppId, name: players[oppId]||oppId, ...v })),
+                vsOpponents: (stat.vsTop||[]).map(([oppId, v]: any)=> ({ opponentId: oppId, name: players[oppId] || playersEx[oppId]?.name || oppId, ...v })),
                 qualitativeData: {
-                  boutAnalyses: boutAnalyses.map((a:any)=> ({ boutId: a.boutId, category: a.category, content: a.content, importance: a.importance, tags: a.tags, recordedAt: a.recordedAt })),
+                  boutAnalyses: boutAnalyses.map((a:any)=> {
+                    // Find bout to get context
+                    let opponentName = null
+                    let opponentUniversity = null
+                    let subjectName = null
+                    let isAboutSelectedPlayer = false
+                    for(const m of matches){
+                      const bout = (m.bouts?.items ?? []).find((b:any)=> b.id === a.boutId)
+                      if(bout){
+                        const isOur = bout.ourPlayerId === playerId
+                        const oppId = isOur ? bout.opponentPlayerId : bout.ourPlayerId
+                        opponentName = players[oppId] || playersEx[oppId]?.name || oppId
+                        const oppInfo = playersEx[oppId]
+                        opponentUniversity = oppInfo?.universityId ? (universities[oppInfo.universityId] || '') : ''
+
+                        // Identify who this analysis is about
+                        isAboutSelectedPlayer = a.subjectPlayerId === playerId
+                        if(isAboutSelectedPlayer){
+                          subjectName = players[playerId] || playersEx[playerId]?.name || playerId
+                        } else {
+                          subjectName = opponentName
+                        }
+                        break
+                      }
+                    }
+                    return {
+                      boutId: a.boutId,
+                      subjectPlayerId: a.subjectPlayerId,
+                      subjectName,  // Who this analysis is about
+                      isAboutSelectedPlayer,  // True if about the main subject, false if about opponent
+                      category: a.category,
+                      content: a.content,
+                      importance: a.importance,
+                      tags: a.tags,
+                      recordedAt: a.recordedAt,
+                      opponentName,
+                      opponentUniversity
+                    }
+                  }),
                   playerAnalyses: playerAnalyses.map((a:any)=> ({ category: a.category, content: a.content, importance: a.importance, tags: a.tags, periodStart: a.periodStart, periodEnd: a.periodEnd, recordedAt: a.recordedAt }))
                 },
                 notes: { dataSource: 'client-aggregated' }
@@ -761,6 +952,115 @@ export default function Dashboard(props:{
               <Flex gap="0.5rem" marginTop="1rem" justifyContent="flex-end">
                 <Button onClick={()=> setAnalysisModal({...analysisModal, open:false})}>{t('action.cancel')}</Button>
                 <Button variation="primary" onClick={savePlayerAnalysis}>{t('action.add')}</Button>
+              </Flex>
+            </View>
+          </div>
+        </div>
+      )}
+
+      {/* Video Edit Modal */}
+      {videoModal.open && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', padding: '2rem', borderRadius: '8px', maxWidth: '600px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
+            <View>
+              <Heading level={4}>{i18n.language?.startsWith('ja') ? '動画URL編集' : 'Edit Video URLs'}</Heading>
+              <div style={{ marginTop: '1rem' }}>
+                <Heading level={6}>{i18n.language?.startsWith('ja') ? '試合全体の動画' : 'Match Video'}</Heading>
+                <TextField
+                  label={i18n.language?.startsWith('ja') ? '動画URL' : 'Video URL'}
+                  value={videoModal.matchVideoUrl}
+                  onChange={e=> setVideoModal({...videoModal, matchVideoUrl: e.target.value})}
+                  placeholder="https://youtube.com/watch?v=..."
+                  marginTop="0.5rem"
+                />
+                <TextField
+                  label={i18n.language?.startsWith('ja') ? 'プレイリストURL' : 'Playlist URL'}
+                  value={videoModal.matchVideoPlaylist}
+                  onChange={e=> setVideoModal({...videoModal, matchVideoPlaylist: e.target.value})}
+                  placeholder="https://youtube.com/playlist?list=..."
+                  marginTop="0.5rem"
+                />
+              </div>
+              <div style={{ marginTop: '1.5rem' }}>
+                <Heading level={6}>{i18n.language?.startsWith('ja') ? 'この試合の動画（優先）' : 'Bout Video (Priority)'}</Heading>
+                <TextField
+                  label={i18n.language?.startsWith('ja') ? '動画URL' : 'Video URL'}
+                  value={videoModal.boutVideoUrl}
+                  onChange={e=> setVideoModal({...videoModal, boutVideoUrl: e.target.value})}
+                  placeholder="https://youtube.com/watch?v=..."
+                  marginTop="0.5rem"
+                />
+                <TextField
+                  label={i18n.language?.startsWith('ja') ? 'タイムスタンプ（秒）' : 'Timestamp (seconds)'}
+                  type="number"
+                  value={videoModal.boutVideoTimestamp}
+                  onChange={e=> setVideoModal({...videoModal, boutVideoTimestamp: e.target.value})}
+                  placeholder="125"
+                  marginTop="0.5rem"
+                />
+                <div style={{ fontSize: '0.875rem', color: '#666', marginTop: '0.25rem' }}>
+                  {i18n.language?.startsWith('ja')
+                    ? '※タイムスタンプを指定すると、動画がその位置から再生されます'
+                    : '* Timestamp will make the video start at that position'}
+                </div>
+              </div>
+              <Flex gap="0.5rem" marginTop="1.5rem" justifyContent="flex-end">
+                <Button onClick={()=> setVideoModal({...videoModal, open:false})}>
+                  {i18n.language?.startsWith('ja') ? 'キャンセル' : 'Cancel'}
+                </Button>
+                <Button variation="primary" onClick={async ()=> {
+                  if(!ai) return
+                  try {
+                    const token = await ai.getToken()
+                    if(!token) return
+
+                    // Update Match video URLs
+                    if(videoModal.matchId){
+                      const updateMatchMutation = `mutation UpdateMatch($input: UpdateMatchInput!) {
+                        updateMatch(input:$input){ id videoUrl videoPlaylist }
+                      }`
+                      const matchInput = {
+                        id: videoModal.matchId,
+                        videoUrl: videoModal.matchVideoUrl || null,
+                        videoPlaylist: videoModal.matchVideoPlaylist || null
+                      }
+                      const r1 = await fetch(ai.apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                        body: JSON.stringify({ query: updateMatchMutation, variables: { input: matchInput } })
+                      })
+                      const j1: any = await r1.json()
+                      if(j1.errors) throw new Error(JSON.stringify(j1.errors))
+                    }
+
+                    // Update Bout video URLs
+                    if(videoModal.boutId){
+                      const updateBoutMutation = `mutation UpdateBout($input: UpdateBoutInput!) {
+                        updateBout(input:$input){ id videoUrl videoTimestamp }
+                      }`
+                      const boutInput: any = {
+                        id: videoModal.boutId,
+                        videoUrl: videoModal.boutVideoUrl || null,
+                        videoTimestamp: videoModal.boutVideoTimestamp ? parseInt(videoModal.boutVideoTimestamp) : null
+                      }
+                      const r2 = await fetch(ai.apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': token },
+                        body: JSON.stringify({ query: updateBoutMutation, variables: { input: boutInput } })
+                      })
+                      const j2: any = await r2.json()
+                      if(j2.errors) throw new Error(JSON.stringify(j2.errors))
+                    }
+
+                    setVideoModal({...videoModal, open: false})
+                    // Refresh matches to show updated video links
+                    window.location.reload()
+                  } catch(e: any) {
+                    alert(i18n.language?.startsWith('ja') ? '保存に失敗しました' : 'Failed to save')
+                  }
+                }}>
+                  {i18n.language?.startsWith('ja') ? '保存' : 'Save'}
+                </Button>
               </Flex>
             </View>
           </div>

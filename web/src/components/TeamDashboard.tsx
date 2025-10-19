@@ -6,6 +6,7 @@ import AIPanel from './AIPanel'
 type Match = { id: string; heldOn: string; tournament?: string; isOfficial?: boolean; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
 type Point = { tSec: number; target?: string | null; methods?: string[] | null; scorerPlayerId?: string | null; judgement?: string | null }
+type PlayerEx = { name: string; gender?: string|null; universityId?: string|null; grade?: number|null }
 
 export default function TeamDashboard(props:{
   matches: Match[]
@@ -27,8 +28,28 @@ export default function TeamDashboard(props:{
   const [viewMode, setViewMode] = useState<'regular'|'intra'>('regular')
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPayload, setAiPayload] = useState<any|null>(null)
+  const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
 
   useEffect(()=>{ if(!teamId && homeUniversityId) setTeamId(homeUniversityId) }, [homeUniversityId])
+
+  // Fetch players with extended info (gender, university, grade)
+  useEffect(()=>{
+    async function fetchPlayersEx(){
+      try{
+        const token = await ai?.getToken(); if(!token || !ai) return
+        const q = `query ListPlayers($limit:Int,$nextToken:String){ listPlayers(limit:$limit,nextToken:$nextToken){ items{ id name gender universityId grade } nextToken } }`
+        let nextToken: string | null = null; const map: Record<string, PlayerEx> = {}
+        do{
+          const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token as string }, body: JSON.stringify({ query: q, variables:{ limit:200, nextToken } }) })
+          const j:any = await r.json(); if(j.errors) throw new Error(JSON.stringify(j.errors))
+          for(const p of j.data.listPlayers.items){ map[p.id] = { name: p.name, gender: p.gender, universityId: p.universityId, grade: p.grade } }
+          nextToken = j.data.listPlayers.nextToken
+        } while(nextToken)
+        setPlayersEx(map)
+      }catch{}
+    }
+    fetchPlayersEx()
+  }, [])
 
   const teamList = useMemo(()=>{
     const ids = new Set<string>()
@@ -175,9 +196,9 @@ export default function TeamDashboard(props:{
         }
       }
     }
-    return Object.entries(map).map(([playerId, v])=> ({ playerId, name: players[playerId] || playerId, pf: v.pf, pa: v.pa }))
+    return Object.entries(map).map(([playerId, v])=> ({ playerId, name: players[playerId] || playersEx[playerId]?.name || playerId, pf: v.pf, pa: v.pa }))
       .sort((a,b)=> (b.pf - a.pf) || (a.pa - b.pa))
-  }, [matches, teamId, players])
+  }, [matches, teamId, players, playersEx])
 
   // Export helpers
   function downloadCSV(filename:string, rows: (string|number)[][]){

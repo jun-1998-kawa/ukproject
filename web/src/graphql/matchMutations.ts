@@ -19,7 +19,7 @@ export const createPlayerMutation = `mutation CreatePlayer($input: CreatePlayerI
 }`
 
 export const updateBoutMutation = `mutation UpdateBout($input: UpdateBoutInput!) {
-  updateBout(input:$input){ id winType winnerPlayerId }
+  updateBout(input:$input){ id winType winnerPlayerId videoUrl videoTimestamp }
 }`
 
 export const updateMatchMutation = `mutation UpdateMatch($input: UpdateMatchInput!) {
