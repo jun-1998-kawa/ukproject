@@ -32,6 +32,8 @@ export default function ScoutingDashboard(props:{
   const [aiPayload, setAiPayload] = useState<any|null>(null)
   const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
   const [universities, setUniversities] = useState<Record<string, string>>({})
+  const [playerAnalyses, setPlayerAnalyses] = useState<any[]>([])
+  const [boutAnalyses, setBoutAnalyses] = useState<any[]>([])
 
   // Fetch players with extended info (gender, university, grade)
   useEffect(()=>{
@@ -71,9 +73,61 @@ export default function ScoutingDashboard(props:{
     fetchUniversities()
   }, [])
 
+  // Fetch player analyses when player is selected
+  useEffect(()=>{
+    async function fetchPlayerAnalyses(){
+      if(!playerId || !ai) return
+      try{
+        const token = await ai.getToken(); if(!token) return
+        const q = `query ListPlayerAnalysisByPlayer($playerId:ID!){ listPlayerAnalysisByPlayer(playerId:$playerId){ items{ id playerId category content importance tags periodStart periodEnd recordedAt } } }`
+        const r = await fetch(ai.apiUrl, { method:'POST', headers:{ 'Content-Type':'application/json','Authorization':token }, body: JSON.stringify({ query: q, variables:{ playerId } }) })
+        const j:any = await r.json()
+        if(j.data?.listPlayerAnalysisByPlayer?.items){
+          setPlayerAnalyses(j.data.listPlayerAnalysisByPlayer.items)
+        } else {
+          setPlayerAnalyses([])
+        }
+      }catch{ setPlayerAnalyses([]) }
+    }
+    fetchPlayerAnalyses()
+  }, [playerId])
+
+  // Fetch bout analyses when player is selected
+  useEffect(()=>{
+    async function fetchBoutAnalyses(){
+      if(!playerId || !ai) return
+      const analyses: any[] = []
+      try{
+        const token = await ai.getToken(); if(!token) return
+        // Find all bouts for this player
+        for(const m of matches){
+          for(const b of (m.bouts?.items ?? [])){
+            if(b.ourPlayerId===playerId || b.opponentPlayerId===playerId){
+              const boutId = b.id
+              try{
+                const q = `query ListBoutAnalysisByBout($boutId:ID!){ listBoutAnalysisByBout(boutId:$boutId){ items{ id boutId subjectPlayerId category content importance tags recordedAt } } }`
+                const r = await fetch(ai.apiUrl, { method:'POST', headers:{'Content-Type':'application/json','Authorization':token}, body: JSON.stringify({ query: q, variables:{ boutId } }) })
+                const j:any = await r.json()
+                if(j.data?.listBoutAnalysisByBout?.items){
+                  analyses.push(...j.data.listBoutAnalysisByBout.items)
+                }
+              }catch{}
+            }
+          }
+        }
+        setBoutAnalyses(analyses)
+      }catch{ setBoutAnalyses([]) }
+    }
+    fetchBoutAnalyses()
+  }, [playerId, matches])
+
   // Filter to opponent players only (not from home university)
   const opponentPlayerList = useMemo(() => {
-    let list = Object.entries(players).map(([id, name]) => {
+    // Merge players from both sources: props.players and playersEx
+    const allPlayerIds = new Set([...Object.keys(players), ...Object.keys(playersEx)])
+
+    let list = Array.from(allPlayerIds).map(id => {
+      const name = players[id] || playersEx[id]?.name || id  // Fallback to playersEx name, then ID
       const info = playersEx[id]
       const uniName = info?.universityId ? universities[info.universityId] || '' : ''
       const gradeText = info?.grade ? `${info.grade}年` : ''
@@ -151,6 +205,70 @@ export default function ScoutingDashboard(props:{
     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst }
   }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter])
+
+  // Match list for selected opponent player
+  const matchList = useMemo(()=>{
+    if(!playerId) return []
+    const filtered = matches.filter(m=>{
+      if(from && m.heldOn < from) return false
+      if(to && m.heldOn > to) return false
+      if(officialFilter==='official' && (m as any).isOfficial === false) return false
+      if(officialFilter==='practice' && (m as any).isOfficial !== false) return false
+      if(tournamentFilter && (m as any).tournament && !(m as any).tournament.toLowerCase().includes(tournamentFilter.toLowerCase())) return false
+      if(tournamentFilter && !(m as any).tournament) return false
+      return true
+    })
+    const list: any[] = []
+    for(const m of filtered){
+      for(const b of (m.bouts?.items ?? [])){
+        const isLeft = b.ourPlayerId===playerId
+        const isRight = b.opponentPlayerId===playerId
+        if(!isLeft && !isRight) continue
+
+        const opponentId = isLeft ? b.opponentPlayerId : b.ourPlayerId
+        const opponentName = players[opponentId] || playersEx[opponentId]?.name || opponentId
+        const opponentUniId = isLeft ? m.ourUniversityId : m.opponentUniversityId
+        const opponentUniversity = opponentUniId ? (universities[opponentUniId] || opponentUniId) : ''
+
+        let winStatus = '-'
+        if(b.winType==='DRAW'){ winStatus = '△' }
+        else if(b.winnerPlayerId===playerId){ winStatus = '○' }
+        else if(b.winnerPlayerId){ winStatus = '●' }
+
+        // Points scored by selected player
+        const pointsFor = (b.points?.items ?? []).filter(p=> p.scorerPlayerId===playerId)
+        const pointsForLabels = pointsFor.map(p=> {
+          if(p.judgement==='HANSOKU') return t('winType.HANSOKU')
+          const tgt = p.target ? labelJa.target[p.target] ?? p.target : ''
+          const mth = (p.methods||[]).map(m=> labelJa.method[m] ?? m).join('')
+          return `${mth}${tgt}`
+        }).join(', ')
+
+        // Build video URL with timestamp
+        const boutVideoUrl = (b as any).videoUrl
+        const matchVideoUrl = (m as any).videoUrl
+        const matchVideoPlaylist = (m as any).videoPlaylist
+        let videoUrl = boutVideoUrl || matchVideoUrl || matchVideoPlaylist || ''
+        if(videoUrl && (b as any).videoTimestamp){
+          const ts = (b as any).videoTimestamp
+          const separator = videoUrl.includes('?') ? '&' : '?'
+          videoUrl = `${videoUrl}${separator}t=${ts}`
+        }
+
+        list.push({
+          matchId: m.id,
+          boutId: b.id,
+          date: m.heldOn,
+          opponentName,
+          opponentUniversity,
+          winStatus,
+          pointsFor: pointsForLabels || '-',
+          videoUrl
+        })
+      }
+    }
+    return list.sort((a,b)=> b.date.localeCompare(a.date))
+  }, [matches, playerId, from, to, officialFilter, tournamentFilter, players, playersEx, universities, labelJa, t])
 
   function labelTarget(code:string){ return labelJa.target[code] ?? code }
   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
@@ -295,6 +413,82 @@ export default function ScoutingDashboard(props:{
             <PieChart items={stat.topCombinedAgainst.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
           </View>
 
+          {/* Match List Section */}
+          <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '試合一覧' : 'Match History'}</Heading>
+            {matchList.length === 0 ? (
+              <div style={{ textAlign:'center', color:'#999', padding:'1rem' }}>
+                {i18n.language?.startsWith('ja') ? '試合データがありません' : 'No match data'}
+              </div>
+            ) : (
+              <Table size="small" variation="striped">
+                <TableHead>
+                  <TableRow>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '日付' : 'Date'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '対戦相手' : 'Opponent'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '大学' : 'University'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '勝敗' : 'Result'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '取った技' : 'Points Scored'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '動画' : 'Video'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {matchList.map((item:any, idx:number)=> (
+                    <TableRow key={idx}>
+                      <TableCell>{item.date}</TableCell>
+                      <TableCell>{item.opponentName}</TableCell>
+                      <TableCell>{item.opponentUniversity}</TableCell>
+                      <TableCell>{item.winStatus}</TableCell>
+                      <TableCell>{item.pointsFor}</TableCell>
+                      <TableCell>
+                        {item.videoUrl ? (
+                          <a href={item.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color:'#0066cc', textDecoration:'none' }}>
+                            {i18n.language?.startsWith('ja') ? '動画を見る' : 'Watch'}
+                          </a>
+                        ) : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </View>
+
+          {/* Video List Section */}
+          <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '動画一覧' : 'Video List'}</Heading>
+            {matchList.filter(m=>m.videoUrl).length === 0 ? (
+              <div style={{ textAlign:'center', color:'#999', padding:'1rem' }}>
+                {i18n.language?.startsWith('ja') ? '動画データがありません' : 'No video data'}
+              </div>
+            ) : (
+              <Table size="small" variation="striped">
+                <TableHead>
+                  <TableRow>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '日付' : 'Date'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '対戦相手' : 'Opponent'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '大学' : 'University'}</TableCell>
+                    <TableCell as="th">{i18n.language?.startsWith('ja') ? '動画' : 'Video'}</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {matchList.filter(m=>m.videoUrl).map((item:any, idx:number)=> (
+                    <TableRow key={idx}>
+                      <TableCell>{item.date}</TableCell>
+                      <TableCell>{item.opponentName}</TableCell>
+                      <TableCell>{item.opponentUniversity}</TableCell>
+                      <TableCell>
+                        <a href={item.videoUrl} target="_blank" rel="noopener noreferrer" style={{ color:'#0066cc', textDecoration:'none' }}>
+                          {i18n.language?.startsWith('ja') ? '動画を見る' : 'Watch'}
+                        </a>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </View>
+
           {ai && (
             <div style={{ gridColumn:'1 / -1', display:'flex', justifyContent:'flex-end', gap:'0.5rem' }}>
               <Button variation="primary" onClick={async ()=> {
@@ -320,6 +514,50 @@ export default function ScoutingDashboard(props:{
                   stats: { bouts: stat.bouts, wins: stat.wins, losses: stat.losses, draws: stat.draws, pf: stat.pf, pa: stat.pa, ppg: stat.ppg, diff: stat.diff, winRate: stat.winRate, avgTimeToScoreSec: stat.avgTime, fastestSec: stat.fastest, slowestSec: stat.slowest },
                   topTechniquesFor: (stat.topCombinedFor||[]).map(([k,v]:any)=> ({ key:k, count: v })),
                   topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
+                  qualitativeData: {
+                    boutAnalyses: boutAnalyses.map((a:any)=> {
+                      // Find bout to get context
+                      let vsPlayerName = null
+                      let vsUniversity = null
+                      let subjectName = null
+                      let isAboutScoutedPlayer = false
+                      for(const m of matches){
+                        const bout = (m.bouts?.items ?? []).find((b:any)=> b.id === a.boutId)
+                        if(bout){
+                          // For scouting, we're analyzing the selected player (playerId)
+                          // We want to know who they were fighting against
+                          const isOur = bout.ourPlayerId === playerId
+                          const vsPlayerId = isOur ? bout.opponentPlayerId : bout.ourPlayerId
+                          vsPlayerName = players[vsPlayerId] || playersEx[vsPlayerId]?.name || vsPlayerId
+                          const vsInfo = playersEx[vsPlayerId]
+                          vsUniversity = vsInfo?.universityId ? (universities[vsInfo.universityId] || '') : ''
+
+                          // Identify who this analysis is about
+                          isAboutScoutedPlayer = a.subjectPlayerId === playerId
+                          if(isAboutScoutedPlayer){
+                            subjectName = players[playerId] || playersEx[playerId]?.name || playerId
+                          } else {
+                            subjectName = vsPlayerName
+                          }
+                          break
+                        }
+                      }
+                      return {
+                        boutId: a.boutId,
+                        subjectPlayerId: a.subjectPlayerId,
+                        subjectName,  // Who this analysis is about
+                        isAboutScoutedPlayer,  // True if about the scouted opponent, false if about their opponent
+                        category: a.category,
+                        content: a.content,
+                        importance: a.importance,
+                        tags: a.tags,
+                        recordedAt: a.recordedAt,
+                        vsPlayer: vsPlayerName,  // 誰と対戦したか
+                        vsUniversity
+                      }
+                    }),
+                    playerAnalyses: playerAnalyses.map((a:any)=> ({ category: a.category, content: a.content, importance: a.importance, tags: a.tags, periodStart: a.periodStart, periodEnd: a.periodEnd, recordedAt: a.recordedAt }))
+                  },
                   notes: { dataSource: 'client-aggregated', context: 'opponent-scouting' }
                 }
                 setAiPayload(payload); setAiOpen(true)

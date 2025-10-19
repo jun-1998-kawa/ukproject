@@ -7,7 +7,8 @@
       "Bash(findstr /r \"\\.(ts|tsx|mjs|json)$\")",
       "Bash(npx tsc --noEmit)",
       "Bash(npm run typecheck)",
-      "Bash(npm run build)"
+      "Bash(npm run build)",
+      "Bash(npm install react-markdown remark-gfm)"
     ],
     "deny": [],
     "ask": []
