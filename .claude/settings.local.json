@@ -8,7 +8,10 @@
       "Bash(npx tsc --noEmit)",
       "Bash(npm run typecheck)",
       "Bash(npm run build)",
-      "Bash(npm install react-markdown remark-gfm)"
+      "Bash(npm install react-markdown remark-gfm)",
+      "Bash(findstr /i \"amplify_outputs.json .env\")",
+      "Bash(findstr \"amplify_outputs\")",
+      "Bash(git check-ignore -v amplify_outputs.json .env)"
     ],
     "deny": [],
     "ask": []
