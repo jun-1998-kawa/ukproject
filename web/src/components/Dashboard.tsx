@@ -792,7 +792,7 @@ export default function Dashboard(props:{
                 topTechniquesAgainst: (stat.topCombinedAgainst||[]).map(([k,v]:any)=> ({ key:k, count: v })),
                 vsOpponents: (stat.vsTop||[]).map(([oppId, v]: any)=> ({ opponentId: oppId, name: players[oppId] || playersEx[oppId]?.name || oppId, ...v })),
                 qualitativeData: {
-                  boutAnalyses: boutAnalyses.map((a:any)=> {
+                  boutAnalyses: boutAnalyses.filter((a:any)=> a && a.boutId).map((a:any)=> {
                     // Find bout to get context
                     let opponentName = null
                     let opponentUniversity = null
@@ -831,7 +831,7 @@ export default function Dashboard(props:{
                       opponentUniversity
                     }
                   }),
-                  playerAnalyses: playerAnalyses.map((a:any)=> ({ category: a.category, content: a.content, importance: a.importance, tags: a.tags, periodStart: a.periodStart, periodEnd: a.periodEnd, recordedAt: a.recordedAt }))
+                  playerAnalyses: playerAnalyses.filter((a:any)=> a).map((a:any)=> ({ category: a.category, content: a.content, importance: a.importance, tags: a.tags, periodStart: a.periodStart, periodEnd: a.periodEnd, recordedAt: a.recordedAt }))
                 },
                 notes: { dataSource: 'client-aggregated' }
               }
