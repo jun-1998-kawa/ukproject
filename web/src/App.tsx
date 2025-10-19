@@ -50,6 +50,7 @@ export default function App() {
   const [techModal, setTechModal] = useState<{ open: boolean, side: 'left'|'right'|null, target: string, methods: string[] }>({ open: false, side: null, target: '', methods: [] })
   const [fouls, setFouls] = useState<Record<string, number>>({})
   const [showLegacy, setShowLegacy] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const apiUrl = (outputs as any).data.url as string
 
@@ -269,6 +270,13 @@ export default function App() {
       {({ signOut, user }) => (
         <div className="app-shell">
           <header className="app-header">
+            <button
+              className="menu-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle menu"
+            >
+              ☰
+            </button>
             <div style={{ display:'flex', alignItems:'center', gap:12 }}>
               <Heading level={4} style={{ margin:0 }}>{t('app.title')}</Heading>
             </div>
@@ -277,15 +285,22 @@ export default function App() {
               <Button onClick={signOut}>{t('action.signOut')}</Button>
             </div>
           </header>
-          <aside className="app-sidebar">
+
+          {/* Overlay for mobile */}
+          <div
+            className={`sidebar-overlay${sidebarOpen ? ' visible' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          />
+
+          <aside className={`app-sidebar${sidebarOpen ? ' open' : ''}`}>
             <nav style={{ display:'grid', gap:6 }}>
-              <a className={`nav-item${tab==='home'?' active':''}`} onClick={()=> setTab('home')}>{i18n.language?.startsWith('ja') ? 'ホーム' : 'Home'}</a>
-              <a className={`nav-item${tab==='dashboard'?' active':''}`} onClick={()=> setTab('dashboard')}>{t('tab.dashboard')}</a>
-              <a className={`nav-item${tab==='new'?' active':''}`} onClick={()=> setTab('new')}>{t('tab.new')}</a>
+              <a className={`nav-item${tab==='home'?' active':''}`} onClick={()=> { setTab('home'); setSidebarOpen(false) }}>{i18n.language?.startsWith('ja') ? 'ホーム' : 'Home'}</a>
+              <a className={`nav-item${tab==='dashboard'?' active':''}`} onClick={()=> { setTab('dashboard'); setSidebarOpen(false) }}>{t('tab.dashboard')}</a>
+              <a className={`nav-item${tab==='new'?' active':''}`} onClick={()=> { setTab('new'); setSidebarOpen(false) }}>{t('tab.new')}</a>
               <hr />
               <div className="muted" style={{ fontSize:'12px', padding:'4px 8px' }}>Admin</div>
-              <a className={`nav-item${tab==='players'?' active':''}`} onClick={()=> setTab('players')}>{t('nav.playersRegister')}</a>
-              <a className={`nav-item${tab==='universities'?' active':''}`} onClick={()=> setTab('universities')}>{t('nav.universities')}</a>
+              <a className={`nav-item${tab==='players'?' active':''}`} onClick={()=> { setTab('players'); setSidebarOpen(false) }}>{t('nav.playersRegister')}</a>
+              <a className={`nav-item${tab==='universities'?' active':''}`} onClick={()=> { setTab('universities'); setSidebarOpen(false) }}>{t('nav.universities')}</a>
             </nav>
           </aside>
           <main className="app-main">
