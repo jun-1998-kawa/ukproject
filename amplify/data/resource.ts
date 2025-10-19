@@ -80,6 +80,7 @@ const schema = a.schema({
     awardedExchanges: a.hasMany("Exchange","awardedToPlayerId"),
     actions: a.hasMany("Action","actorPlayerId"),
     analyses: a.hasMany("PlayerAnalysis","playerId"),
+    boutAnalyses: a.hasMany("BoutAnalysis","subjectPlayerId"),
   }).secondaryIndexes((idx)=>[
     idx("universityId").queryField("listPlayersByUniversity"),
     idx("name").queryField("listPlayersByName"),
