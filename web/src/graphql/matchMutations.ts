@@ -43,3 +43,9 @@ export const createBoutAnalysisMutation = `mutation CreateBoutAnalysis($input: C
     id boutId category content importance tags recordedAt
   }
 }`
+
+export const createPlayerAnalysisMutation = `mutation CreatePlayerAnalysis($input: CreatePlayerAnalysisInput!) {
+  createPlayerAnalysis(input:$input){
+    id playerId category content importance tags periodStart periodEnd recordedAt
+  }
+}`

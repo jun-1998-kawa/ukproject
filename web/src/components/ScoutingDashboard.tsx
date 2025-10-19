@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex } from '@aws-amplify/ui-react'
+import { View, Heading, SelectField, Table, TableHead, TableRow, TableCell, TableBody, Badge, TextField, Button, Flex, RadioGroupField, Radio, TextAreaField } from '@aws-amplify/ui-react'
 import AIPanel from './AIPanel'
+import { createPlayerAnalysisMutation } from '../graphql/matchMutations'
 
 type Match = { id: string; heldOn: string; ourUniversityId?: string; opponentUniversityId?: string; bouts?: { items: Bout[] } }
 type Bout = { id: string; ourPlayerId: string; opponentPlayerId: string; winType?: string | null; winnerPlayerId?: string | null; points?: { items: Point[] } }
@@ -28,12 +29,20 @@ export default function ScoutingDashboard(props:{
   const [topN, setTopN] = useState<number>(5)
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'>('all')
   const [playerSearch, setPlayerSearch] = useState<string>('')
+  const [granularity, setGranularity] = useState<'coarse'|'detailed'>('detailed')
   const [aiOpen, setAiOpen] = useState(false)
   const [aiPayload, setAiPayload] = useState<any|null>(null)
   const [playersEx, setPlayersEx] = useState<Record<string, PlayerEx>>({})
   const [universities, setUniversities] = useState<Record<string, string>>({})
   const [playerAnalyses, setPlayerAnalyses] = useState<any[]>([])
   const [boutAnalyses, setBoutAnalyses] = useState<any[]>([])
+
+  // Form state for adding new player analysis
+  const [newAnalysisCategory, setNewAnalysisCategory] = useState<string>('TACTICAL')
+  const [newAnalysisContent, setNewAnalysisContent] = useState<string>('')
+  const [newAnalysisImportance, setNewAnalysisImportance] = useState<string>('MEDIUM')
+  const [newAnalysisTags, setNewAnalysisTags] = useState<string>('')
+  const [submitting, setSubmitting] = useState(false)
 
   // Fetch players with extended info (gender, university, grade)
   useEffect(()=>{
@@ -170,6 +179,17 @@ export default function ScoutingDashboard(props:{
       return `${target||''}:${mm.join('+')}`
     }
 
+    // Helper to generate key based on granularity
+    const makeKey = (target: string, methods: string[]) => {
+      if(granularity === 'coarse') {
+        // Coarse: target only (面, 小手, 胴, 突き)
+        return target || ''
+      } else {
+        // Detailed: target:methods (飛び込み面, すり上げ小手, etc.)
+        return buildTechniqueKey(target, methods)
+      }
+    }
+
     for(const m of filtered){
       for(const b of (m.bouts?.items ?? [])){
         // Check if this player is involved
@@ -185,12 +205,12 @@ export default function ScoutingDashboard(props:{
           if(p.scorerPlayerId===playerId){
             pf++; if(typeof p.tSec==='number') times.push(p.tSec)
             if(p.judgement==='HANSOKU') { combinedFor['HANSOKU']=(combinedFor['HANSOKU']||0)+1; continue }
-            const key = buildTechniqueKey(p.target||'', p.methods||[])
+            const key = makeKey(p.target||'', p.methods||[])
             combinedFor[key] = (combinedFor[key]||0)+1
           } else if(p.scorerPlayerId && (p.scorerPlayerId!==playerId)){
             pa++
             if(p.judgement==='HANSOKU') combinedAgainst['HANSOKU'] = (combinedAgainst['HANSOKU']||0)+1
-            else { const key = buildTechniqueKey(p.target||'', p.methods||[]); combinedAgainst[key] = (combinedAgainst[key]||0)+1 }
+            else { const key = makeKey(p.target||'', p.methods||[]); combinedAgainst[key] = (combinedAgainst[key]||0)+1 }
           }
         }
       }
@@ -204,7 +224,7 @@ export default function ScoutingDashboard(props:{
     const topCombinedFor = Object.entries(combinedFor).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     const topCombinedAgainst = Object.entries(combinedAgainst).sort((a,b)=> b[1]-a[1]).slice(0, topN)
     return { wins, losses, draws, bouts, pf, pa, avgTime, fastest, slowest, winRate, ppg, diff, topCombinedFor, topCombinedAgainst }
-  }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter])
+  }, [matches, playerId, from, to, tournamentFilter, topN, officialFilter, granularity])
 
   // Match list for selected opponent player
   const matchList = useMemo(()=>{
@@ -274,10 +294,16 @@ export default function ScoutingDashboard(props:{
   function labelMethod(code:string){ return code==='HANSOKU' ? t('winType.HANSOKU') : (labelJa.method[code] ?? code) }
   function labelTechniqueCombined(key:string){
     if(key==='HANSOKU') return t('winType.HANSOKU')
-    const [target, mstr] = key.split(':')
-    const ml = (mstr? mstr.split('+') : []).map(labelMethod)
-    const base = ml.join('')
-    return `${base}${labelTarget(target)}`
+    if(granularity === 'coarse') {
+      // Coarse mode: show target only
+      return labelTarget(key)
+    } else {
+      // Detailed mode: show methods + target
+      const [target, mstr] = key.split(':')
+      const ml = (mstr? mstr.split('+') : []).map(labelMethod)
+      const base = ml.join('')
+      return `${base}${labelTarget(target)}`
+    }
   }
 
   function PieChart({items, size=160}:{ items: [string, number][], size?:number }){
@@ -340,6 +366,48 @@ export default function ScoutingDashboard(props:{
     )
   }
 
+  // Submit handler for adding new player analysis
+  async function handleAddAnalysis(){
+    if(!playerId || !newAnalysisContent.trim()) {
+      alert(i18n.language?.startsWith('ja') ? '選手を選択し、内容を入力してください' : 'Please select a player and enter content')
+      return
+    }
+    if(!ai) return
+    setSubmitting(true)
+    try{
+      const token = await ai.getToken(); if(!token) throw new Error('No token')
+      const input = {
+        playerId,
+        category: newAnalysisCategory,
+        content: newAnalysisContent.trim(),
+        importance: newAnalysisImportance,
+        tags: newAnalysisTags.trim() ? newAnalysisTags.split(',').map(t=> t.trim()).filter(Boolean) : [],
+        recordedAt: new Date().toISOString()
+      }
+      const res = await fetch(ai.apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization': token },
+        body: JSON.stringify({ query: createPlayerAnalysisMutation, variables:{ input } })
+      })
+      const json = await res.json()
+      if(json.errors) throw new Error(JSON.stringify(json.errors))
+      const created = json.data?.createPlayerAnalysis
+      if(!created) throw new Error('No data returned')
+      // Add to local state
+      setPlayerAnalyses(prev=> [created, ...prev])
+      // Clear form
+      setNewAnalysisContent('')
+      setNewAnalysisTags('')
+      setNewAnalysisCategory('TACTICAL')
+      setNewAnalysisImportance('MEDIUM')
+      alert(i18n.language?.startsWith('ja') ? '分析記録を追加しました' : 'Analysis added successfully')
+    }catch(e:any){
+      alert(`Error: ${e.message}`)
+    }finally{
+      setSubmitting(false)
+    }
+  }
+
   return (
     <View>
       <Heading level={4}>{i18n.language?.startsWith('ja') ? '対戦相手分析（スカウティング）' : 'Opponent Scouting'}</Heading>
@@ -373,7 +441,14 @@ export default function ScoutingDashboard(props:{
           <SelectField label={t('dashboard.topN')} value={String(topN)} onChange={e=> setTopN(Number(e.target.value))} size="small" width="10rem">
             {[5,10,15].map(n=> (<option key={n} value={n}>{n}</option>))}
           </SelectField>
-          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all'); setPlayerSearch(''); setPlayerId('') }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600 }}>{t('dashboard.granularity')}</label>
+            <RadioGroupField legend="" name="granularity" value={granularity} onChange={e=> setGranularity(e.target.value as any)} direction="row">
+              <Radio value="coarse">{t('dashboard.granularityCoarse')}</Radio>
+              <Radio value="detailed">{t('dashboard.granularityDetailed')}</Radio>
+            </RadioGroupField>
+          </div>
+          <Button onClick={()=> { setFrom(''); setTo(''); setTournamentFilter(''); setTopN(5); setOfficialFilter('all'); setPlayerSearch(''); setPlayerId(''); setGranularity('detailed') }}>
             {t('dashboard.clear')}
           </Button>
         </Flex>
@@ -411,6 +486,69 @@ export default function ScoutingDashboard(props:{
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.pieAgainst')}</Heading>
             <PieChart items={stat.topCombinedAgainst.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
+          </View>
+
+          {/* Technique Details Tables */}
+          <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '取得技詳細' : 'Scored Techniques Detail'}</Heading>
+            <Table size="small" variation="striped">
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '技' : 'Technique'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '本数' : 'Count'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '割合' : 'Percentage'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {stat.topCombinedFor.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} style={{ textAlign:'center', color:'#999' }}>
+                      {i18n.language?.startsWith('ja') ? 'データなし' : 'No data'}
+                    </TableCell>
+                  </TableRow>
+                ) : stat.topCombinedFor.map(([k,v],i)=> {
+                  const pct = ((v/stat.pf)*100).toFixed(1)
+                  return (
+                    <TableRow key={i}>
+                      <TableCell>{labelTechniqueCombined(k)}</TableCell>
+                      <TableCell><b>{v}</b></TableCell>
+                      <TableCell>{pct}%</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </View>
+
+          <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '被取得技詳細' : 'Conceded Techniques Detail'}</Heading>
+            <Table size="small" variation="striped">
+              <TableHead>
+                <TableRow>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '技' : 'Technique'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '本数' : 'Count'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '割合' : 'Percentage'}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {stat.topCombinedAgainst.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} style={{ textAlign:'center', color:'#999' }}>
+                      {i18n.language?.startsWith('ja') ? 'データなし' : 'No data'}
+                    </TableCell>
+                  </TableRow>
+                ) : stat.topCombinedAgainst.map(([k,v],i)=> {
+                  const pct = ((v/stat.pa)*100).toFixed(1)
+                  return (
+                    <TableRow key={i}>
+                      <TableCell>{labelTechniqueCombined(k)}</TableCell>
+                      <TableCell><b>{v}</b></TableCell>
+                      <TableCell>{pct}%</TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
           </View>
 
           {/* Match List Section */}
@@ -567,6 +705,68 @@ export default function ScoutingDashboard(props:{
             </div>
           )}
 
+          {/* Add New Player Analysis Form */}
+          {playerId && ai && (
+            <View style={{ gridColumn:'1 / -1', border:'1px solid #667eea', borderRadius:8, padding:12, marginTop:12, background:'#f8f9ff' }}>
+              <Heading level={6} style={{ marginBottom:'0.75rem' }}>
+                {i18n.language?.startsWith('ja') ? '新規分析記録を追加' : 'Add New Analysis Record'}
+              </Heading>
+              <Flex direction="column" gap="0.75rem">
+                <Flex gap="0.75rem" wrap="wrap">
+                  <SelectField
+                    label={i18n.language?.startsWith('ja') ? 'カテゴリー' : 'Category'}
+                    value={newAnalysisCategory}
+                    onChange={e=> setNewAnalysisCategory(e.target.value)}
+                    width="180px"
+                  >
+                    <option value="STRENGTH">{t('analysis.categories.STRENGTH')}</option>
+                    <option value="WEAKNESS">{t('analysis.categories.WEAKNESS')}</option>
+                    <option value="TACTICAL">{t('analysis.categories.TACTICAL')}</option>
+                    <option value="MENTAL">{t('analysis.categories.MENTAL')}</option>
+                    <option value="TECHNICAL">{t('analysis.categories.TECHNICAL')}</option>
+                    <option value="PHYSICAL">{t('analysis.categories.PHYSICAL')}</option>
+                    <option value="OTHER">{t('analysis.categories.OTHER')}</option>
+                  </SelectField>
+                  <SelectField
+                    label={i18n.language?.startsWith('ja') ? '重要度' : 'Importance'}
+                    value={newAnalysisImportance}
+                    onChange={e=> setNewAnalysisImportance(e.target.value)}
+                    width="150px"
+                  >
+                    <option value="HIGH">{t('analysis.importance_levels.HIGH')}</option>
+                    <option value="MEDIUM">{t('analysis.importance_levels.MEDIUM')}</option>
+                    <option value="LOW">{t('analysis.importance_levels.LOW')}</option>
+                  </SelectField>
+                </Flex>
+                <TextAreaField
+                  label={i18n.language?.startsWith('ja') ? '内容' : 'Content'}
+                  value={newAnalysisContent}
+                  onChange={e=> setNewAnalysisContent(e.target.value)}
+                  placeholder={i18n.language?.startsWith('ja') ? '分析内容を記入してください' : 'Enter analysis content'}
+                  rows={4}
+                  required
+                />
+                <TextField
+                  label={i18n.language?.startsWith('ja') ? 'タグ（カンマ区切り）' : 'Tags (comma-separated)'}
+                  value={newAnalysisTags}
+                  onChange={e=> setNewAnalysisTags(e.target.value)}
+                  placeholder={i18n.language?.startsWith('ja') ? '例: 攻撃的, 左構え' : 'e.g., aggressive, left-handed'}
+                />
+                <Button
+                  variation="primary"
+                  onClick={handleAddAnalysis}
+                  isDisabled={submitting || !newAnalysisContent.trim()}
+                  width="200px"
+                >
+                  {submitting
+                    ? (i18n.language?.startsWith('ja') ? '追加中...' : 'Adding...')
+                    : (i18n.language?.startsWith('ja') ? '分析記録を追加' : 'Add Analysis')
+                  }
+                </Button>
+              </Flex>
+            </View>
+          )}
+
           {/* Analysis Records Section */}
           <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10, marginTop:12 }}>
             <Heading level={6}>{i18n.language?.startsWith('ja') ? '分析記録' : 'Analysis Records'}</Heading>
@@ -581,7 +781,7 @@ export default function ScoutingDashboard(props:{
                   {i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}
                 </div>
               ) : (
-                playerAnalyses.map(a=> (
+                playerAnalyses.filter((a:any)=> a && a.category).map(a=> (
                   <View key={a.id} marginTop="0.5rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
                       <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
@@ -618,7 +818,7 @@ export default function ScoutingDashboard(props:{
                   {i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}
                 </div>
               ) : (
-                boutAnalyses.map(a=> (
+                boutAnalyses.filter((a:any)=> a && a.category).map(a=> (
                   <View key={a.id} marginTop="0.5rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
                       <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
