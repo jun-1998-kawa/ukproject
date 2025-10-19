@@ -11,6 +11,7 @@ import PlayersAdmin from './components/PlayersAdmin'
 import UniversitiesAdmin from './components/UniversitiesAdmin'
 import Dashboard from './components/Dashboard'
 import TeamDashboard from './components/TeamDashboard'
+import ScoutingDashboard from './components/ScoutingDashboard'
 
 import outputs from './amplify_outputs.json'
 
@@ -40,7 +41,7 @@ export default function App() {
   const [labelJa, setLabelJa] = useState<{ target: Record<string,string>, method: Record<string,string>, position: Record<string,string> }>({ target: {}, method: {}, position: {} })
   const [selectedMatchId, setSelectedMatchId] = useState('')
   const [selectedBoutId, setSelectedBoutId] = useState('')
-  const [tab, setTab] = useState<'home'|'new'|'players'|'universities'|'dashboard'>('home')
+  const [tab, setTab] = useState<'home'|'new'|'players'|'universities'|'dashboard'|'scouting'>('home')
   const [officialFilter, setOfficialFilter] = useState<'all'|'official'|'practice'|'intra'>('all')
   const [homeUniversityId, setHomeUniversityId] = useState<string>('')
   const [universities, setUniversities] = useState<Record<string,string>>({})
@@ -392,6 +393,26 @@ export default function App() {
                   >
                     🏫 {t('nav.universities') || '大学管理'}
                   </button>
+                  <button
+                    onClick={()=> setTab('scouting')}
+                    style={{
+                      padding:'2rem',
+                      background:'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                      color:'white',
+                      border:'none',
+                      borderRadius:'12px',
+                      fontSize:'1.25rem',
+                      fontWeight:600,
+                      cursor:'pointer',
+                      boxShadow:'0 4px 15px rgba(250,112,154,0.4)',
+                      transition:'transform 0.2s, box-shadow 0.2s',
+                      fontFamily: '"Noto Sans JP", sans-serif'
+                    }}
+                    onMouseOver={e=> { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(250,112,154,0.5)' }}
+                    onMouseOut={e=> { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 15px rgba(250,112,154,0.4)' }}
+                  >
+                    🔍 {i18n.language?.startsWith('ja') ? '対戦相手分析' : 'Opponent Scouting'}
+                  </button>
                 </div>
               </div>
             )}
@@ -439,6 +460,17 @@ export default function App() {
               )}
             </>
           ) : null}
+
+          {tab==='scouting' && (
+            <ScoutingDashboard
+              matches={matches as any}
+              players={players}
+              labelJa={labelJa}
+              masters={{ targets: masters.targets as any, methods: masters.methods as any }}
+              homeUniversityId={homeUniversityId}
+              ai={{ apiUrl, getToken }}
+            />
+          )}
           </main>
         </div>
       )}

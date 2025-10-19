@@ -80,6 +80,9 @@ export default function NewEntryMode(props: {
   const [opMsg, setOpMsg] = useState<string|undefined>(undefined)
   const [savingId, setSavingId] = useState<string>('')
   const [analysisModal, setAnalysisModal] = useState<{ open: boolean; boutId: string; category: string; content: string; importance: string; tags: string }>({ open: false, boutId: '', category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })
+  const [matchSearch, setMatchSearch] = useState<string>('')
+  const [showMatchSuggestions, setShowMatchSuggestions] = useState<boolean>(false)
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number>(-1)
 
   useEffect(()=>{
     const init: Record<string, RowState> = {}
@@ -363,14 +366,186 @@ export default function NewEntryMode(props: {
     })
   }, [boutsLocal])
 
+  // Filter and sort matches for suggestions (date descending)
+  const filteredMatches = useMemo(() => {
+    if (!matchSearch.trim()) return []
+
+    const query = matchSearch.trim().toLowerCase()
+    const universityMap: Record<string, string> = {}
+    for (const u of universities) {
+      universityMap[u.id] = u.shortName || u.name || u.id
+    }
+
+    return matches
+      .filter(m => {
+        const tournament = (m.tournament || '').toLowerCase()
+        const date = m.heldOn || ''
+        const ourUniv = ((m as any).ourUniversityId ? universityMap[(m as any).ourUniversityId] || '' : '').toLowerCase()
+        const oppUniv = ((m as any).opponentUniversityId ? universityMap[(m as any).opponentUniversityId] || '' : '').toLowerCase()
+
+        return (
+          tournament.includes(query) ||
+          date.includes(query) ||
+          ourUniv.includes(query) ||
+          oppUniv.includes(query)
+        )
+      })
+      .sort((a, b) => {
+        // Sort by date descending (newest first)
+        return (b.heldOn || '').localeCompare(a.heldOn || '')
+      })
+      .slice(0, 10) // Limit to 10 suggestions
+  }, [matchSearch, matches, universities])
+
   return (
     <>
     <View>
       <View marginBottom="0.5rem" display="flex" style={{gap:'0.5rem', flexWrap:'wrap', alignItems:'flex-end'}}>
-        <SelectField label={t('labels.match')} value={matchId} onChange={e=> setMatchId(e.target.value)} size="small">
-          <option value="">{t('placeholders.select')}</option>
-          {matches.map(m => (<option key={m.id} value={m.id}>{m.heldOn} {m.tournament ?? ''}</option>))}
-        </SelectField>
+        <div style={{ position: 'relative', minWidth: dense ? '16rem' : '20rem' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>
+            {t('labels.match')}
+          </label>
+          <input
+            type="text"
+            placeholder="大会名、日付、大学名で検索..."
+            value={matchSearch}
+            onChange={e => {
+              setMatchSearch(e.target.value)
+              setShowMatchSuggestions(true)
+              setSelectedSuggestionIndex(-1)
+            }}
+            onFocus={() => setShowMatchSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowMatchSuggestions(false), 250)}
+            onKeyDown={e => {
+              if (!showMatchSuggestions || filteredMatches.length === 0) return
+
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setSelectedSuggestionIndex(prev => (prev + 1) % filteredMatches.length)
+              } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setSelectedSuggestionIndex(prev => prev <= 0 ? filteredMatches.length - 1 : prev - 1)
+              } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+                e.preventDefault()
+                const selected = filteredMatches[selectedSuggestionIndex]
+                if (selected) {
+                  setMatchId(selected.id)
+                  setMatchSearch('')
+                  setShowMatchSuggestions(false)
+                  setSelectedSuggestionIndex(-1)
+                }
+              } else if (e.key === 'Escape') {
+                setShowMatchSuggestions(false)
+                setSelectedSuggestionIndex(-1)
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '6px 8px',
+              fontSize: 14,
+              border: '1px solid #ccc',
+              borderRadius: 4,
+              background: matchId ? '#f5f5f5' : '#fff'
+            }}
+          />
+          {matchId && (
+            <button
+              onClick={() => {
+                setMatchId('')
+                setMatchSearch('')
+              }}
+              style={{
+                position: 'absolute',
+                right: 8,
+                top: 28,
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: 16,
+                color: '#666',
+                padding: 2
+              }}
+              title="クリア"
+            >
+              ✕
+            </button>
+          )}
+          {showMatchSuggestions && filteredMatches.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                background: '#fff',
+                border: '1px solid #ccc',
+                borderRadius: 4,
+                maxHeight: 320,
+                overflowY: 'auto',
+                zIndex: 1000,
+                marginTop: 2,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}
+            >
+              {filteredMatches.map((m, idx) => {
+                const ourUniv = (m as any).ourUniversityId
+                  ? universities.find(u => u.id === (m as any).ourUniversityId)?.shortName ||
+                    universities.find(u => u.id === (m as any).ourUniversityId)?.name ||
+                    ''
+                  : ''
+                const oppUniv = (m as any).opponentUniversityId
+                  ? universities.find(u => u.id === (m as any).opponentUniversityId)?.shortName ||
+                    universities.find(u => u.id === (m as any).opponentUniversityId)?.name ||
+                    ''
+                  : ''
+                const isSelected = idx === selectedSuggestionIndex
+
+                return (
+                  <div
+                    key={m.id}
+                    onClick={() => {
+                      setMatchId(m.id)
+                      setMatchSearch('')
+                      setShowMatchSuggestions(false)
+                      setSelectedSuggestionIndex(-1)
+                    }}
+                    style={{
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #f0f0f0',
+                      background: isSelected ? '#e8f4f8' : '#fff'
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) e.currentTarget.style.background = '#f5f5f5'
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) e.currentTarget.style.background = '#fff'
+                    }}
+                  >
+                    <div style={{ fontSize: 11, color: '#666', marginBottom: 2 }}>
+                      📅 {m.heldOn}
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>
+                      {m.tournament || '(大会名なし)'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#555' }}>
+                      ⚔️ {ourUniv || '?'} vs {oppUniv || '?'}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {matchId && (() => {
+            const selectedMatch = matches.find(m => m.id === matchId)
+            if (!selectedMatch) return null
+            return (
+              <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                選択中: {selectedMatch.heldOn} {selectedMatch.tournament || '(大会名なし)'}
+              </div>
+            )
+          })()}
+        </div>
         <TextField label={t('labels.tournament')} value={tournament} onChange={e=> setTournament(e.target.value)} width={dense?"12rem":"16rem"} />
         <TextField label={t('labels.date')} type="date" value={heldOn} onChange={e=> setHeldOn(e.target.value)} width={dense?"10rem":"12rem"} />
         <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
