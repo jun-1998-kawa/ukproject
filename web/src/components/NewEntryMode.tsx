@@ -589,6 +589,7 @@ export default function NewEntryMode(props: {
         </div>
       )}
 
+      <div className="table-responsive">
       <Table variation="bordered" highlightOnHover style={{ fontSize: dense? 12: 14, lineHeight: dense? 1.15: 1.35 }}>
         <TableHead>
           <TableRow>
@@ -763,6 +764,7 @@ export default function NewEntryMode(props: {
           })}
         </TableBody>
       </Table>
+      </div>
     </View>
     <DeleteConfirmModal
       open={!!delModal?.open}

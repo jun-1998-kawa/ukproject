@@ -326,7 +326,7 @@ export default function TeamDashboard(props:{
 
       {/* Intra-squad view */}
       {teamId && viewMode === 'intra' && intraStat && (
-        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(200px,1fr))', gap:12}}>
+        <View marginTop="0.75rem" className="responsive-grid" style={{display:'grid', gridTemplateColumns:'repeat(2,minmax(200px,1fr))', gap:12}}>
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{i18n.language?.startsWith('ja') ? '部内戦統計' : 'Intra-Squad Stats'}</Heading>
             <div>{i18n.language?.startsWith('ja') ? '試合数' : 'Matches'}: <b>{intraStat.matches}</b></div>
@@ -365,7 +365,7 @@ export default function TeamDashboard(props:{
 
       {/* Regular external matches view */}
       {teamId && viewMode === 'regular' && stat && (
-        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
+        <View marginTop="0.75rem" className="responsive-grid" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.stats')}</Heading>
             <div>{t('dashboard.bouts')}: <b>{stat.bouts}</b></div>

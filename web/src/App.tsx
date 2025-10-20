@@ -305,25 +305,27 @@ export default function App() {
           </aside>
           <main className="app-main">
             {tab==='home' && (
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'70vh', padding:'2rem' }}>
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'70vh', padding:'clamp(1rem, 4vw, 2rem)' }}>
                 <h1 style={{
-                  fontSize: '5rem',
+                  fontSize: 'clamp(2.5rem, 10vw, 5rem)',
                   fontFamily: '"Noto Serif JP", "游明朝", "Yu Mincho", "YuMincho", serif',
                   fontWeight: 700,
                   color: '#1a1a1a',
                   marginBottom: '0.5rem',
                   letterSpacing: '0.1em',
-                  textShadow: '2px 2px 4px rgba(0,0,0,0.1)'
+                  textShadow: '2px 2px 4px rgba(0,0,0,0.1)',
+                  textAlign: 'center'
                 }}>
                   剣道DB
                 </h1>
                 <p style={{
-                  fontSize: '1.5rem',
+                  fontSize: 'clamp(1rem, 4vw, 1.5rem)',
                   fontFamily: '"Brush Script MT", cursive',
                   fontStyle: 'italic',
                   color: '#666',
-                  marginBottom: '3rem',
-                  letterSpacing: '0.05em'
+                  marginBottom: 'clamp(1.5rem, 6vw, 3rem)',
+                  letterSpacing: '0.05em',
+                  textAlign: 'center'
                 }}>
                   KENDO DB
                 </p>

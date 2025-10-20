@@ -108,3 +108,59 @@ hr { border: 0; border-top: 1px solid var(--border); }
 .row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
 .muted { color: var(--text-muted); }
 
+/* Table responsive wrapper */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile responsive utilities */
+@media (max-width: 768px) {
+  /* Reduce heading sizes on mobile */
+  h1 { font-size: 2rem !important; }
+  h2 { font-size: 1.5rem !important; }
+  h3 { font-size: 1.25rem !important; }
+  h4 { font-size: 1.1rem !important; }
+  h5 { font-size: 1rem !important; }
+
+  /* Stack grids on mobile */
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Make tables scrollable */
+  table {
+    font-size: 0.875rem;
+  }
+
+  /* Reduce padding on cards */
+  .card {
+    padding: var(--space-3);
+  }
+
+  /* Smaller gaps */
+  .row {
+    gap: var(--space-2);
+  }
+
+  /* Full width buttons on mobile */
+  .btn-mobile-full {
+    width: 100%;
+  }
+
+  /* Hide on mobile */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Show only on mobile */
+  .show-mobile {
+    display: block !important;
+  }
+}
+
+/* Show only on mobile (hidden by default) */
+.show-mobile {
+  display: none;
+}
+
