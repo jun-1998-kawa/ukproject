@@ -83,6 +83,7 @@ export default function NewEntryMode(props: {
   const [matchSearch, setMatchSearch] = useState<string>('')
   const [showMatchSuggestions, setShowMatchSuggestions] = useState<boolean>(false)
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number>(-1)
+  const [expandedBouts, setExpandedBouts] = useState<Set<string>>(new Set())
 
   useEffect(()=>{
     const init: Record<string, RowState> = {}
@@ -354,6 +355,18 @@ export default function NewEntryMode(props: {
   }
   function getPlayerName(playerId: string){ return playersEx.find(p=> p.id===playerId)?.name ?? players[playerId] ?? playerId }
 
+  function toggleBoutExpansion(boutId: string) {
+    setExpandedBouts(prev => {
+      const next = new Set(prev)
+      if (next.has(boutId)) {
+        next.delete(boutId)
+      } else {
+        next.add(boutId)
+      }
+      return next
+    })
+  }
+
   // Sort bouts by createdAt to maintain input order (newly added bouts appear at the bottom)
   const sortedBouts = useMemo(() => {
     return [...boutsLocal].sort((a, b) => {
@@ -589,7 +602,7 @@ export default function NewEntryMode(props: {
         </div>
       )}
 
-      <div className="table-responsive">
+      <div className="table-responsive hide-on-mobile-accordion">
       <Table variation="bordered" highlightOnHover style={{ fontSize: dense? 12: 14, lineHeight: dense? 1.15: 1.35 }}>
         <TableHead>
           <TableRow>
@@ -764,6 +777,115 @@ export default function NewEntryMode(props: {
           })}
         </TableBody>
       </Table>
+      </div>
+
+      {/* Mobile accordion view */}
+      <div className="show-on-mobile-accordion">
+        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder={t('placeholders.enterPlayerName')}
+            value={leftSearch}
+            onChange={e => setLeftSearch(e.target.value)}
+            style={{ flex: 1, minWidth: '120px', padding: '8px', fontSize: 14, border: '1px solid #ccc', borderRadius: 4 }}
+          />
+          <select value={newLeft} onChange={e => setNewLeft(e.target.value)} style={{ flex: 1, minWidth: '120px', padding: '8px', fontSize: 14 }}>
+            <option value="">{t('placeholders.selectLeft')}</option>
+            {buildPlayerOptionsEx(playersEx, universities, leftSearch.trim() || playerFilter)}
+          </select>
+        </div>
+        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder={t('placeholders.enterPlayerName')}
+            value={rightSearch}
+            onChange={e => setRightSearch(e.target.value)}
+            style={{ flex: 1, minWidth: '120px', padding: '8px', fontSize: 14, border: '1px solid #ccc', borderRadius: 4 }}
+          />
+          <select value={newRight} onChange={e => setNewRight(e.target.value)} style={{ flex: 1, minWidth: '120px', padding: '8px', fontSize: 14 }}>
+            <option value="">{t('placeholders.selectRight')}</option>
+            {buildPlayerOptionsEx(playersEx, universities, rightSearch.trim() || playerFilter)}
+          </select>
+        </div>
+        <Button size="small" onClick={addNewBout} isDisabled={!newLeft || !newRight} style={{ width: '100%', marginBottom: '1rem' }}>{t('actions.add')}</Button>
+
+        {sortedBouts.map((b) => {
+          const s = rows[b.id] ?? { left1: null, left2: null, right1: null, right2: null, leftFouls: 0, rightFouls: 0 }
+          const rowValid = [s.left1, s.left2, s.right1, s.right2].every(ipponValidOrEmpty)
+          const isExpanded = expandedBouts.has(b.id)
+
+          return (
+            <div key={b.id} className="bout-card-mobile">
+              <div className="bout-card-header" onClick={() => toggleBoutExpansion(b.id)}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, color: '#2f4f2f', marginBottom: 4 }}>
+                    {getPlayerName(b.ourPlayerId)}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#666' }}>
+                    vs {getPlayerName(b.opponentPlayerId)}
+                  </div>
+                </div>
+                <div style={{ fontSize: '1.25rem', color: '#666' }}>
+                  {isExpanded ? '▼' : '▶'}
+                </div>
+              </div>
+
+              <div className={`bout-card-content${isExpanded ? ' open' : ''}`}>
+                <div className="bout-input-group">
+                  <label>{getPlayerName(b.ourPlayerId)} (A側)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#666' }}>反則:</span>
+                    <Button size="small" variation="link" onClick={() => setRows(r => ({ ...r, [b.id]: { ...s, leftFouls: Math.max(0, (s.leftFouls || 0) - 1) } }))} style={{ minWidth: 28, padding: '2px 6px' }}>-</Button>
+                    <Badge variation={s.leftFouls >= 2 ? 'warning' : 'info'} style={{ padding: '2px 8px' }}>{s.leftFouls || 0}</Badge>
+                    <Button size="small" variation="link" onClick={() => setRows(r => ({ ...r, [b.id]: { ...s, leftFouls: Math.min(2, (s.leftFouls || 0) + 1) } }))} style={{ minWidth: 28, padding: '2px 6px' }}>+</Button>
+                  </div>
+                  <div className="ippon-inputs">
+                    <div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: 4, color: '#888' }}>1本目</div>
+                      <IpponCell value={s.left1} onFocus={() => setFocusBoutId(b.id)} onChange={(next) => setRows(r => ({ ...r, [b.id]: { ...s, left1: next } }))} targets={safeTargets} methods={safeMethods} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: 4, color: '#888' }}>2本目</div>
+                      <IpponCell value={s.left2} onFocus={() => setFocusBoutId(b.id)} onChange={(next) => setRows(r => ({ ...r, [b.id]: { ...s, left2: next } }))} targets={safeTargets} methods={safeMethods} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bout-input-group">
+                  <label>{getPlayerName(b.opponentPlayerId)} (B側)</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#666' }}>反則:</span>
+                    <Button size="small" variation="link" onClick={() => setRows(r => ({ ...r, [b.id]: { ...s, rightFouls: Math.max(0, (s.rightFouls || 0) - 1) } }))} style={{ minWidth: 28, padding: '2px 6px' }}>-</Button>
+                    <Badge variation={s.rightFouls >= 2 ? 'warning' : 'info'} style={{ padding: '2px 8px' }}>{s.rightFouls || 0}</Badge>
+                    <Button size="small" variation="link" onClick={() => setRows(r => ({ ...r, [b.id]: { ...s, rightFouls: Math.min(2, (s.rightFouls || 0) + 1) } }))} style={{ minWidth: 28, padding: '2px 6px' }}>+</Button>
+                  </div>
+                  <div className="ippon-inputs">
+                    <div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: 4, color: '#888' }}>1本目</div>
+                      <IpponCell value={s.right1} onFocus={() => setFocusBoutId(b.id)} onChange={(next) => setRows(r => ({ ...r, [b.id]: { ...s, right1: next } }))} targets={safeTargets} methods={safeMethods} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', fontWeight: 600, marginBottom: 4, color: '#888' }}>2本目</div>
+                      <IpponCell value={s.right2} onFocus={() => setFocusBoutId(b.id)} onChange={(next) => setRows(r => ({ ...r, [b.id]: { ...s, right2: next } }))} targets={safeTargets} methods={safeMethods} />
+                    </div>
+                  </div>
+                </div>
+
+                {!rowValid && (
+                  <div style={{ color: '#d17', fontSize: '0.75rem', marginBottom: '0.5rem', padding: '0.5rem', background: '#fff3cd', borderRadius: 4 }}>
+                    {t('warnings.incompleteInputs')}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+                  <Button size="small" onClick={() => saveRow(b)} isDisabled={!rowValid || savingId === b.id} isLoading={savingId === b.id} style={{ flex: 1, minWidth: '100px' }}>{t('actions.save')}</Button>
+                  <Button size="small" variation="link" onClick={() => setAnalysisModal({ open: true, boutId: b.id, category: 'TACTICAL', content: '', importance: 'MEDIUM', tags: '' })} style={{ flex: 1, minWidth: '100px' }}>{t('analysis.addAnalysis')}</Button>
+                  <Button size="small" variation="link" colorTheme="warning" onClick={() => setDelModal({ open: true, kind: 'bout', targetId: b.id, bout: b })}>{t('actions.delete')}</Button>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </View>
     <DeleteConfirmModal

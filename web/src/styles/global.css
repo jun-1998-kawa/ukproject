@@ -164,3 +164,72 @@ hr { border: 0; border-top: 1px solid var(--border); }
   display: none;
 }
 
+/* Mobile-optimized bout entry cards */
+.bout-card-mobile {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.bout-card-header {
+  padding: 1rem;
+  background: #f8f9fa;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.bout-card-header:active {
+  background: #e9ecef;
+}
+
+.bout-card-content {
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+}
+
+.bout-card-content.open {
+  max-height: 2000px;
+  padding: 1rem;
+  transition: max-height 0.5s ease-in, padding 0.3s ease-in;
+}
+
+.bout-input-group {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.bout-input-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ippon-inputs {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .hide-on-mobile-accordion {
+    display: none !important;
+  }
+
+  .show-on-mobile-accordion {
+    display: block !important;
+  }
+}
+
