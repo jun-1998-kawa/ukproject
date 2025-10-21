@@ -247,8 +247,8 @@ export default function ScoutingDashboard(props:{
 
         const opponentId = isLeft ? b.opponentPlayerId : b.ourPlayerId
         const opponentName = players[opponentId] || playersEx[opponentId]?.name || opponentId
-        const opponentUniId = isLeft ? m.opponentUniversityId : m.ourUniversityId
-        const opponentUniversity = opponentUniId ? (universities[opponentUniId] || opponentUniId) : ''
+        const opponentInfo = playersEx[opponentId]
+        const opponentUniversity = opponentInfo?.universityId ? (universities[opponentInfo.universityId] || '') : ''
 
         let winStatus = '-'
         if(b.winType==='DRAW'){ winStatus = '△' }
@@ -491,6 +491,7 @@ export default function ScoutingDashboard(props:{
           {/* Technique Details Tables */}
           <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
             <Heading level={6}>{i18n.language?.startsWith('ja') ? '取得技詳細' : 'Scored Techniques Detail'}</Heading>
+            <div className="table-responsive">
             <Table size="small" variation="striped">
               <TableHead>
                 <TableRow>
@@ -518,10 +519,12 @@ export default function ScoutingDashboard(props:{
                 })}
               </TableBody>
             </Table>
+            </div>
           </View>
 
           <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
             <Heading level={6}>{i18n.language?.startsWith('ja') ? '被取得技詳細' : 'Conceded Techniques Detail'}</Heading>
+            <div className="table-responsive">
             <Table size="small" variation="striped">
               <TableHead>
                 <TableRow>
@@ -549,6 +552,7 @@ export default function ScoutingDashboard(props:{
                 })}
               </TableBody>
             </Table>
+            </div>
           </View>
 
           {/* Match List Section */}
@@ -559,6 +563,7 @@ export default function ScoutingDashboard(props:{
                 {i18n.language?.startsWith('ja') ? '試合データがありません' : 'No match data'}
               </div>
             ) : (
+              <div className="table-responsive">
               <Table size="small" variation="striped">
                 <TableHead>
                   <TableRow>
@@ -589,6 +594,7 @@ export default function ScoutingDashboard(props:{
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </View>
 
@@ -600,6 +606,7 @@ export default function ScoutingDashboard(props:{
                 {i18n.language?.startsWith('ja') ? '動画データがありません' : 'No video data'}
               </div>
             ) : (
+              <div className="table-responsive">
               <Table size="small" variation="striped">
                 <TableHead>
                   <TableRow>
@@ -624,6 +631,7 @@ export default function ScoutingDashboard(props:{
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </View>
 
@@ -774,22 +782,26 @@ export default function ScoutingDashboard(props:{
             {/* Player Analyses */}
             <View marginTop="1rem">
               <Heading level={6} style={{ fontSize:'0.9rem', marginBottom:'0.5rem' }}>
-                {i18n.language?.startsWith('ja') ? '選手分析記録' : 'Player Analysis Records'} ({playerAnalyses.length})
+                {i18n.language?.startsWith('ja') ? '選手分析記録' : 'Player Analysis Records'} ({playerAnalyses.filter((a:any)=> a).length})
               </Heading>
               {playerAnalyses.length === 0 ? (
                 <div style={{ color:'#999', fontSize:'0.875rem', padding:'0.5rem' }}>
                   {i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}
                 </div>
               ) : (
-                playerAnalyses.filter((a:any)=> a && a.category).map(a=> (
+                playerAnalyses.filter((a:any)=> a).map(a=> (
                   <View key={a.id} marginTop="0.5rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
-                      <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
-                        {t(`analysis.categories.${a.category}`)}
-                      </Badge>
-                      <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
-                        {t(`analysis.importance_levels.${a.importance}`)}
-                      </Badge>
+                      {a.category && (
+                        <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
+                          {t(`analysis.categories.${a.category}`)}
+                        </Badge>
+                      )}
+                      {a.importance && (
+                        <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
+                          {t(`analysis.importance_levels.${a.importance}`)}
+                        </Badge>
+                      )}
                       {a.tags && a.tags.length > 0 && a.tags.map((tag:string, i:number)=> (
                         <Badge key={i} size="small">{tag}</Badge>
                       ))}
@@ -799,7 +811,9 @@ export default function ScoutingDashboard(props:{
                         {a.periodStart} ～ {a.periodEnd}
                       </div>
                     )}
-                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>{a.content}</div>
+                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>
+                      {a.content || <span style={{ color:'#999', fontStyle:'italic' }}>{i18n.language?.startsWith('ja') ? '（内容なし）' : '(No content)'}</span>}
+                    </div>
                     <div style={{ fontSize:'0.7rem', color:'#999', marginTop:6 }}>
                       {a.recordedAt ? new Date(a.recordedAt).toLocaleString() : ''}
                     </div>
@@ -811,22 +825,26 @@ export default function ScoutingDashboard(props:{
             {/* Bout Analyses */}
             <View marginTop="1.5rem">
               <Heading level={6} style={{ fontSize:'0.9rem', marginBottom:'0.5rem' }}>
-                {i18n.language?.startsWith('ja') ? '試合分析記録' : 'Bout Analysis Records'} ({boutAnalyses.length})
+                {i18n.language?.startsWith('ja') ? '試合分析記録' : 'Bout Analysis Records'} ({boutAnalyses.filter((a:any)=> a).length})
               </Heading>
               {boutAnalyses.length === 0 ? (
                 <div style={{ color:'#999', fontSize:'0.875rem', padding:'0.5rem' }}>
                   {i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}
                 </div>
               ) : (
-                boutAnalyses.filter((a:any)=> a && a.category).map(a=> (
+                boutAnalyses.filter((a:any)=> a).map(a=> (
                   <View key={a.id} marginTop="0.5rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
-                      <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
-                        {t(`analysis.categories.${a.category}`)}
-                      </Badge>
-                      <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
-                        {t(`analysis.importance_levels.${a.importance}`)}
-                      </Badge>
+                      {a.category && (
+                        <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
+                          {t(`analysis.categories.${a.category}`)}
+                        </Badge>
+                      )}
+                      {a.importance && (
+                        <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
+                          {t(`analysis.importance_levels.${a.importance}`)}
+                        </Badge>
+                      )}
                       {a.tags && a.tags.length > 0 && a.tags.map((tag:string, i:number)=> (
                         <Badge key={i} size="small">{tag}</Badge>
                       ))}
@@ -834,7 +852,9 @@ export default function ScoutingDashboard(props:{
                         Bout: {a.boutId?.substring(0,8)}...
                       </span>
                     </div>
-                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>{a.content}</div>
+                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>
+                      {a.content || <span style={{ color:'#999', fontStyle:'italic' }}>{i18n.language?.startsWith('ja') ? '（内容なし）' : '(No content)'}</span>}
+                    </div>
                     <div style={{ fontSize:'0.7rem', color:'#999', marginTop:6 }}>
                       {a.recordedAt ? new Date(a.recordedAt).toLocaleString() : ''}
                     </div>
