@@ -108,3 +108,128 @@ hr { border: 0; border-top: 1px solid var(--border); }
 .row { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
 .muted { color: var(--text-muted); }
 
+/* Table responsive wrapper */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile responsive utilities */
+@media (max-width: 768px) {
+  /* Reduce heading sizes on mobile */
+  h1 { font-size: 2rem !important; }
+  h2 { font-size: 1.5rem !important; }
+  h3 { font-size: 1.25rem !important; }
+  h4 { font-size: 1.1rem !important; }
+  h5 { font-size: 1rem !important; }
+
+  /* Stack grids on mobile */
+  .responsive-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Make tables scrollable */
+  table {
+    font-size: 0.875rem;
+  }
+
+  /* Reduce padding on cards */
+  .card {
+    padding: var(--space-3);
+  }
+
+  /* Smaller gaps */
+  .row {
+    gap: var(--space-2);
+  }
+
+  /* Full width buttons on mobile */
+  .btn-mobile-full {
+    width: 100%;
+  }
+
+  /* Hide on mobile */
+  .hide-mobile {
+    display: none !important;
+  }
+
+  /* Show only on mobile */
+  .show-mobile {
+    display: block !important;
+  }
+}
+
+/* Show only on mobile (hidden by default) */
+.show-mobile {
+  display: none;
+}
+
+/* Mobile-optimized bout entry cards */
+.bout-card-mobile {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.bout-card-header {
+  padding: 1rem;
+  background: #f8f9fa;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+
+.bout-card-header:active {
+  background: #e9ecef;
+}
+
+.bout-card-content {
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+}
+
+.bout-card-content.open {
+  max-height: 2000px;
+  padding: 1rem;
+  transition: max-height 0.5s ease-in, padding 0.3s ease-in;
+}
+
+.bout-input-group {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+
+.bout-input-group label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ippon-inputs {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .hide-on-mobile-accordion {
+    display: none !important;
+  }
+
+  .show-on-mobile-accordion {
+    display: block !important;
+  }
+}
+

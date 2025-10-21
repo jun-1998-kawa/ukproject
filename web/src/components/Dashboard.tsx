@@ -553,7 +553,7 @@ export default function Dashboard(props:{
       )}
 
       {playerId && stat && (
-        <View marginTop="0.75rem" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
+        <View marginTop="0.75rem" className="responsive-grid" style={{display:'grid', gridTemplateColumns:'repeat(3,minmax(180px,1fr))', gap:12}}>
           <View style={{border:'1px solid #eee', borderRadius:8, padding:10}}>
             <Heading level={6}>{t('dashboard.stats')}</Heading>
             <div>{t('filters.type')}: <b>{officialFilter==='all'? t('filters.all') : officialFilter==='official'? t('filters.official') : (officialFilter==='practice' ? t('filters.practice') : t('filters.intra'))}</b></div>
