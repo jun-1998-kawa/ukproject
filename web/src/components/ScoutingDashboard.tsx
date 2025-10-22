@@ -247,8 +247,8 @@ export default function ScoutingDashboard(props:{
 
         const opponentId = isLeft ? b.opponentPlayerId : b.ourPlayerId
         const opponentName = players[opponentId] || playersEx[opponentId]?.name || opponentId
-        const opponentUniId = isLeft ? m.opponentUniversityId : m.ourUniversityId
-        const opponentUniversity = opponentUniId ? (universities[opponentUniId] || opponentUniId) : ''
+        const opponentInfo = playersEx[opponentId]
+        const opponentUniversity = opponentInfo?.universityId ? (universities[opponentInfo.universityId] || '') : ''
 
         let winStatus = '-'
         if(b.winType==='DRAW'){ winStatus = '△' }
@@ -310,21 +310,55 @@ export default function ScoutingDashboard(props:{
     const total = items.reduce((s, [,v])=> s+v, 0)
     if(total<=0) return <div>-</div>
     const r = size/2, cx=r, cy=r
-    const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
 
-    const getColorIndex = (label: string) => {
+    // 技の種類ごとに固定色を割り当て
+    const getColorForTechnique = (label: string): string => {
+      // 反則
+      if(label.includes('反則') || label.includes('HANSOKU')) return '#999999'
+
+      // 面系 - 赤系グラデーション
+      if(label.includes('面')) {
+        if(label.includes('飛び込み') || label.includes('飛込')) return '#e15759'
+        if(label.includes('引き')) return '#d63447'
+        if(label.includes('出ばな') || label.includes('出鼻')) return '#ff6b6b'
+        if(label.includes('すり上げ')) return '#ee5a6f'
+        if(label.includes('返し')) return '#c92a2a'
+        return '#e63946' // デフォルト面
+      }
+
+      // 小手系 - 青系グラデーション
+      if(label.includes('小手')) {
+        if(label.includes('引き')) return '#1971c2'
+        if(label.includes('すり上げ')) return '#339af0'
+        if(label.includes('出ばな') || label.includes('出鼻')) return '#4dabf7'
+        if(label.includes('返し')) return '#1864ab'
+        return '#1c7ed6' // デフォルト小手
+      }
+
+      // 胴系 - 緑系グラデーション
+      if(label.includes('胴')) {
+        if(label.includes('逆')) return '#37b24d'
+        if(label.includes('引き')) return '#2b8a3e'
+        return '#2f9e44' // デフォルト胴
+      }
+
+      // 突き - 黄色/オレンジ系
+      if(label.includes('突き') || label.includes('突')) return '#f59f00'
+
+      // その他 - 紫/グレー系
+      const otherColors = ['#9775fa', '#ae3ec9', '#cc5de8', '#e599f7', '#fa5252', '#ff8787', '#51cf66', '#94d82d', '#ffd43b', '#ffa94d']
       let hash = 0
       for(let i=0; i<label.length; i++){
         hash = ((hash << 5) - hash) + label.charCodeAt(i)
         hash = hash & hash
       }
-      return Math.abs(hash) % palette.length
+      return otherColors[Math.abs(hash) % otherColors.length]
     }
 
     if(items.length === 1){
       const [label, v] = items[0]
       const pct = ((v/total)*100).toFixed(1)
-      const color = palette[getColorIndex(label)]
+      const color = getColorForTechnique(label)
       return (
         <div>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -347,12 +381,12 @@ export default function ScoutingDashboard(props:{
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
-      const color = palette[getColorIndex(label)]
+      const color = getColorForTechnique(label)
       return (<path key={i} d={d} fill={color} stroke="#fff" strokeWidth={1} />)
     })
     const legend = items.map(([label,v],i)=>{
       const pct = ((v/total)*100).toFixed(1)
-      const color = palette[getColorIndex(label)]
+      const color = getColorForTechnique(label)
       return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
         <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
         <span>{label} ({v}本, {pct}%)</span>
@@ -410,7 +444,7 @@ export default function ScoutingDashboard(props:{
 
   return (
     <View>
-      <Heading level={4}>{i18n.language?.startsWith('ja') ? '対戦相手分析（スカウティング）' : 'Opponent Scouting'}</Heading>
+      <Heading level={4}>{i18n.language?.startsWith('ja') ? '対戦相手分析' : 'Opponent Scouting'}</Heading>
       <View marginTop="0.5rem">
         <Flex gap="0.75rem" wrap="wrap" alignItems="flex-end">
           <TextField
@@ -488,67 +522,75 @@ export default function ScoutingDashboard(props:{
             <PieChart items={stat.topCombinedAgainst.map(([k,v])=> [labelTechniqueCombined(k), v] as [string, number])} />
           </View>
 
-          {/* Technique Details Tables */}
+          {/* Combined Technique Details Table */}
           <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
-            <Heading level={6}>{i18n.language?.startsWith('ja') ? '取得技詳細' : 'Scored Techniques Detail'}</Heading>
+            <Heading level={6}>{i18n.language?.startsWith('ja') ? '技詳細（取得 vs 被取得）' : 'Technique Comparison (Scored vs Conceded)'}</Heading>
+            <div className="table-responsive">
             <Table size="small" variation="striped">
               <TableHead>
                 <TableRow>
                   <TableCell as="th">{i18n.language?.startsWith('ja') ? '技' : 'Technique'}</TableCell>
-                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '本数' : 'Count'}</TableCell>
-                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '割合' : 'Percentage'}</TableCell>
+                  <TableCell as="th" style={{ background:'#ffe8e8' }}>{i18n.language?.startsWith('ja') ? '取得本数' : 'Scored'}</TableCell>
+                  <TableCell as="th" style={{ background:'#ffe8e8' }}>{i18n.language?.startsWith('ja') ? '取得%' : 'Scored %'}</TableCell>
+                  <TableCell as="th" style={{ background:'#e8f4ff' }}>{i18n.language?.startsWith('ja') ? '被取得本数' : 'Conceded'}</TableCell>
+                  <TableCell as="th" style={{ background:'#e8f4ff' }}>{i18n.language?.startsWith('ja') ? '被取得%' : 'Conceded %'}</TableCell>
+                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '差分' : '+/-'}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {stat.topCombinedFor.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} style={{ textAlign:'center', color:'#999' }}>
-                      {i18n.language?.startsWith('ja') ? 'データなし' : 'No data'}
-                    </TableCell>
-                  </TableRow>
-                ) : stat.topCombinedFor.map(([k,v],i)=> {
-                  const pct = ((v/stat.pf)*100).toFixed(1)
-                  return (
-                    <TableRow key={i}>
-                      <TableCell>{labelTechniqueCombined(k)}</TableCell>
-                      <TableCell><b>{v}</b></TableCell>
-                      <TableCell>{pct}%</TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </View>
+                {(() => {
+                  // Merge techniques from both topCombinedFor and topCombinedAgainst
+                  const forMap = new Map(stat.topCombinedFor)
+                  const againstMap = new Map(stat.topCombinedAgainst)
+                  const allTechniques = new Set([...forMap.keys(), ...againstMap.keys()])
 
-          <View style={{ gridColumn:'1 / -1', border:'1px solid #eee', borderRadius:8, padding:10 }}>
-            <Heading level={6}>{i18n.language?.startsWith('ja') ? '被取得技詳細' : 'Conceded Techniques Detail'}</Heading>
-            <Table size="small" variation="striped">
-              <TableHead>
-                <TableRow>
-                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '技' : 'Technique'}</TableCell>
-                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '本数' : 'Count'}</TableCell>
-                  <TableCell as="th">{i18n.language?.startsWith('ja') ? '割合' : 'Percentage'}</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {stat.topCombinedAgainst.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3} style={{ textAlign:'center', color:'#999' }}>
-                      {i18n.language?.startsWith('ja') ? 'データなし' : 'No data'}
-                    </TableCell>
-                  </TableRow>
-                ) : stat.topCombinedAgainst.map(([k,v],i)=> {
-                  const pct = ((v/stat.pa)*100).toFixed(1)
-                  return (
-                    <TableRow key={i}>
-                      <TableCell>{labelTechniqueCombined(k)}</TableCell>
-                      <TableCell><b>{v}</b></TableCell>
-                      <TableCell>{pct}%</TableCell>
-                    </TableRow>
-                  )
-                })}
+                  // Create array with all techniques and their counts
+                  const rows = Array.from(allTechniques).map(k => {
+                    const forCount = forMap.get(k) || 0
+                    const againstCount = againstMap.get(k) || 0
+                    return {
+                      key: k,
+                      forCount,
+                      againstCount,
+                      diff: forCount - againstCount,
+                      total: forCount + againstCount
+                    }
+                  })
+
+                  // Sort by total (most frequent techniques first)
+                  rows.sort((a, b) => b.total - a.total)
+
+                  if(rows.length === 0) {
+                    return (
+                      <TableRow>
+                        <TableCell colSpan={6} style={{ textAlign:'center', color:'#999' }}>
+                          {i18n.language?.startsWith('ja') ? 'データなし' : 'No data'}
+                        </TableCell>
+                      </TableRow>
+                    )
+                  }
+
+                  return rows.map((row, i) => {
+                    const forPct = stat.pf > 0 ? ((row.forCount/stat.pf)*100).toFixed(1) : '0.0'
+                    const againstPct = stat.pa > 0 ? ((row.againstCount/stat.pa)*100).toFixed(1) : '0.0'
+                    const diffColor = row.diff > 0 ? '#2f9e44' : row.diff < 0 ? '#e03131' : '#666'
+                    const diffText = row.diff > 0 ? `+${row.diff}` : row.diff.toString()
+
+                    return (
+                      <TableRow key={i}>
+                        <TableCell><b>{labelTechniqueCombined(row.key)}</b></TableCell>
+                        <TableCell style={{ background:'#fff5f5' }}><b>{row.forCount}</b></TableCell>
+                        <TableCell style={{ background:'#fff5f5' }}>{forPct}%</TableCell>
+                        <TableCell style={{ background:'#f0f9ff' }}><b>{row.againstCount}</b></TableCell>
+                        <TableCell style={{ background:'#f0f9ff' }}>{againstPct}%</TableCell>
+                        <TableCell><b style={{ color: diffColor }}>{diffText}</b></TableCell>
+                      </TableRow>
+                    )
+                  })
+                })()}
               </TableBody>
             </Table>
+            </div>
           </View>
 
           {/* Match List Section */}
@@ -559,6 +601,7 @@ export default function ScoutingDashboard(props:{
                 {i18n.language?.startsWith('ja') ? '試合データがありません' : 'No match data'}
               </div>
             ) : (
+              <div className="table-responsive">
               <Table size="small" variation="striped">
                 <TableHead>
                   <TableRow>
@@ -589,6 +632,7 @@ export default function ScoutingDashboard(props:{
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </View>
 
@@ -600,6 +644,7 @@ export default function ScoutingDashboard(props:{
                 {i18n.language?.startsWith('ja') ? '動画データがありません' : 'No video data'}
               </div>
             ) : (
+              <div className="table-responsive">
               <Table size="small" variation="striped">
                 <TableHead>
                   <TableRow>
@@ -624,6 +669,7 @@ export default function ScoutingDashboard(props:{
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </View>
 
@@ -700,7 +746,7 @@ export default function ScoutingDashboard(props:{
                 }
                 setAiPayload(payload); setAiOpen(true)
               }}>
-                {i18n.language?.startsWith('ja') ? 'スカウティングレポート生成' : 'Generate Scouting Report'}
+                {i18n.language?.startsWith('ja') ? 'レポート生成' : 'Generate Scouting Report'}
               </Button>
             </div>
           )}
@@ -774,22 +820,26 @@ export default function ScoutingDashboard(props:{
             {/* Player Analyses */}
             <View marginTop="1rem">
               <Heading level={6} style={{ fontSize:'0.9rem', marginBottom:'0.5rem' }}>
-                {i18n.language?.startsWith('ja') ? '選手分析記録' : 'Player Analysis Records'} ({playerAnalyses.length})
+                {i18n.language?.startsWith('ja') ? '選手分析記録' : 'Player Analysis Records'} ({playerAnalyses.filter((a:any)=> a).length})
               </Heading>
               {playerAnalyses.length === 0 ? (
                 <div style={{ color:'#999', fontSize:'0.875rem', padding:'0.5rem' }}>
                   {i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}
                 </div>
               ) : (
-                playerAnalyses.filter((a:any)=> a && a.category).map(a=> (
+                playerAnalyses.filter((a:any)=> a).map(a=> (
                   <View key={a.id} marginTop="0.5rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
-                      <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
-                        {t(`analysis.categories.${a.category}`)}
-                      </Badge>
-                      <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
-                        {t(`analysis.importance_levels.${a.importance}`)}
-                      </Badge>
+                      {a.category && (
+                        <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
+                          {t(`analysis.categories.${a.category}`)}
+                        </Badge>
+                      )}
+                      {a.importance && (
+                        <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
+                          {t(`analysis.importance_levels.${a.importance}`)}
+                        </Badge>
+                      )}
                       {a.tags && a.tags.length > 0 && a.tags.map((tag:string, i:number)=> (
                         <Badge key={i} size="small">{tag}</Badge>
                       ))}
@@ -799,7 +849,9 @@ export default function ScoutingDashboard(props:{
                         {a.periodStart} ～ {a.periodEnd}
                       </div>
                     )}
-                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>{a.content}</div>
+                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>
+                      {a.content || <span style={{ color:'#999', fontStyle:'italic' }}>{i18n.language?.startsWith('ja') ? '（内容なし）' : '(No content)'}</span>}
+                    </div>
                     <div style={{ fontSize:'0.7rem', color:'#999', marginTop:6 }}>
                       {a.recordedAt ? new Date(a.recordedAt).toLocaleString() : ''}
                     </div>
@@ -811,22 +863,26 @@ export default function ScoutingDashboard(props:{
             {/* Bout Analyses */}
             <View marginTop="1.5rem">
               <Heading level={6} style={{ fontSize:'0.9rem', marginBottom:'0.5rem' }}>
-                {i18n.language?.startsWith('ja') ? '試合分析記録' : 'Bout Analysis Records'} ({boutAnalyses.length})
+                {i18n.language?.startsWith('ja') ? '試合分析記録' : 'Bout Analysis Records'} ({boutAnalyses.filter((a:any)=> a).length})
               </Heading>
               {boutAnalyses.length === 0 ? (
                 <div style={{ color:'#999', fontSize:'0.875rem', padding:'0.5rem' }}>
                   {i18n.language?.startsWith('ja') ? '記録がありません' : 'No records'}
                 </div>
               ) : (
-                boutAnalyses.filter((a:any)=> a && a.category).map(a=> (
+                boutAnalyses.filter((a:any)=> a).map(a=> (
                   <View key={a.id} marginTop="0.5rem" padding="0.75rem" style={{ border:'1px solid #ddd', borderRadius:6, background:'#fafafa' }}>
                     <div style={{ display:'flex', gap:6, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
-                      <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
-                        {t(`analysis.categories.${a.category}`)}
-                      </Badge>
-                      <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
-                        {t(`analysis.importance_levels.${a.importance}`)}
-                      </Badge>
+                      {a.category && (
+                        <Badge variation={a.category==='STRENGTH'?'success':a.category==='WEAKNESS'?'error':'info'} size="small">
+                          {t(`analysis.categories.${a.category}`)}
+                        </Badge>
+                      )}
+                      {a.importance && (
+                        <Badge variation={a.importance==='HIGH'?'error':a.importance==='LOW'?'info':'warning'} size="small">
+                          {t(`analysis.importance_levels.${a.importance}`)}
+                        </Badge>
+                      )}
                       {a.tags && a.tags.length > 0 && a.tags.map((tag:string, i:number)=> (
                         <Badge key={i} size="small">{tag}</Badge>
                       ))}
@@ -834,7 +890,9 @@ export default function ScoutingDashboard(props:{
                         Bout: {a.boutId?.substring(0,8)}...
                       </span>
                     </div>
-                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>{a.content}</div>
+                    <div style={{ marginTop:6, fontSize:'0.875rem', whiteSpace:'pre-wrap' }}>
+                      {a.content || <span style={{ color:'#999', fontStyle:'italic' }}>{i18n.language?.startsWith('ja') ? '（内容なし）' : '(No content)'}</span>}
+                    </div>
                     <div style={{ fontSize:'0.7rem', color:'#999', marginTop:6 }}>
                       {a.recordedAt ? new Date(a.recordedAt).toLocaleString() : ''}
                     </div>
