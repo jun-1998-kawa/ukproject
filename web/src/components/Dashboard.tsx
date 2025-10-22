@@ -446,23 +446,56 @@ export default function Dashboard(props:{
     const total = items.reduce((s, [,v])=> s+v, 0)
     if(total<=0) return <div>-</div>
     const r = size/2, cx=r, cy=r
-    const palette = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7','#9c755f','#bab0ab']
 
-    // Generate stable color index from label
-    const getColorIndex = (label: string) => {
+    // 技の種類ごとに固定色を割り当て
+    const getColorForTechnique = (label: string): string => {
+      // 反則
+      if(label.includes('反則') || label.includes('HANSOKU')) return '#999999'
+
+      // 面系 - 赤系グラデーション
+      if(label.includes('面')) {
+        if(label.includes('飛び込み') || label.includes('飛込')) return '#e15759'
+        if(label.includes('引き')) return '#d63447'
+        if(label.includes('出ばな') || label.includes('出鼻')) return '#ff6b6b'
+        if(label.includes('すり上げ')) return '#ee5a6f'
+        if(label.includes('返し')) return '#c92a2a'
+        return '#e63946' // デフォルト面
+      }
+
+      // 小手系 - 青系グラデーション
+      if(label.includes('小手')) {
+        if(label.includes('引き')) return '#1971c2'
+        if(label.includes('すり上げ')) return '#339af0'
+        if(label.includes('出ばな') || label.includes('出鼻')) return '#4dabf7'
+        if(label.includes('返し')) return '#1864ab'
+        return '#1c7ed6' // デフォルト小手
+      }
+
+      // 胴系 - 緑系グラデーション
+      if(label.includes('胴')) {
+        if(label.includes('逆')) return '#37b24d'
+        if(label.includes('引き')) return '#2b8a3e'
+        return '#2f9e44' // デフォルト胴
+      }
+
+      // 突き - 黄色/オレンジ系
+      if(label.includes('突き') || label.includes('突')) return '#f59f00'
+
+      // その他 - 紫/グレー系
+      const otherColors = ['#9775fa', '#ae3ec9', '#cc5de8', '#e599f7', '#fa5252', '#ff8787', '#51cf66', '#94d82d', '#ffd43b', '#ffa94d']
       let hash = 0
       for(let i=0; i<label.length; i++){
         hash = ((hash << 5) - hash) + label.charCodeAt(i)
-        hash = hash & hash // Convert to 32bit integer
+        hash = hash & hash
       }
-      return Math.abs(hash) % palette.length
+      return otherColors[Math.abs(hash) % otherColors.length]
     }
 
     // Special case: only one item (100%)
     if(items.length === 1){
       const [label, v] = items[0]
       const pct = ((v/total)*100).toFixed(1)
-      const color = palette[getColorIndex(label)]
+      const color = getColorForTechnique(label)
       return (
         <div>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -485,12 +518,12 @@ export default function Dashboard(props:{
       const x1 = cx + r*Math.cos(a1), y1 = cy + r*Math.sin(a1)
       const large = (a1-a0) > Math.PI ? 1 : 0
       const d = `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`
-      const color = palette[getColorIndex(label)]
+      const color = getColorForTechnique(label)
       return (<path key={i} d={d} fill={color} stroke="#fff" strokeWidth={1} />)
     })
     const legend = items.map(([label,v],i)=>{
       const pct = ((v/total)*100).toFixed(1)
-      const color = palette[getColorIndex(label)]
+      const color = getColorForTechnique(label)
       return (<div key={i} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, marginTop:4 }}>
         <div style={{ width:12, height:12, background: color, border:'1px solid #ccc', flexShrink:0 }}></div>
         <span>{label} ({v}本, {pct}%)</span>
